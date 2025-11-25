@@ -44,6 +44,7 @@ import DealStatusMonthly from "./pages/DealStatusMonthly.jsx";
 import Status from "./pages/employee/Status.jsx";
 import Hr from "./pages/hr/Hr.jsx";
 import AddTemplatePage from "./components/AddTemplatePage.jsx";
+import Profile from "./pages/Profile.jsx";
 
 
 export default function App() {
@@ -100,6 +101,7 @@ export default function App() {
          <Route path="/employees/status" element={<Layout><Status /></Layout>} />
          <Route path="/hr" element={<Layout><Hr /></Layout>} />
          <Route path="/template" element={<Layout><AddTemplatePage /></Layout>} />
+          <Route path="/profile" element={<Layout><Profile /></Layout>} />
 
 
          

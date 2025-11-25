@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import OfferLetterModal from "../../components/OfferLetterModal";
 import axios from "axios";
+import { toast } from "react-toastify";
+
 import { 
   FaPlus, 
   FaFilePdf, 
@@ -24,6 +26,7 @@ const Hr = () => {
   const [offerLetters, setOfferLetters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState(null);
+  const [pdfLoadingId, setPdfLoadingId] = useState(null); // NEW
   const apiUrl = import.meta.env.VITE_API_URL;
 
   useEffect(() => {
@@ -37,10 +40,14 @@ const Hr = () => {
         axios.get(`${apiUrl}/templates`),
         axios.get(`${apiUrl}/offerletters`)
       ]);
+
       setTemplates(templatesRes.data);
       setOfferLetters(offerLettersRes.data);
+
+      toast.success("Data loaded successfully");
     } catch (error) {
       console.error("Error fetching data:", error);
+      toast.error("Error loading data");
     } finally {
       setLoading(false);
     }
@@ -49,6 +56,7 @@ const Hr = () => {
   const handleGenerate = () => setShowPopup(true);
 
   const viewPDF = async (htmlString) => {
+    setPdfLoadingId(htmlString); // Start loader
     try {
       const response = await axios.post(
         `${apiUrl}/offerletters/generate-pdf`,
@@ -61,6 +69,7 @@ const Hr = () => {
 
       const blob = new Blob([response.data], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
+      
       const link = document.createElement('a');
       link.href = url;
       link.download = 'offer-letter.pdf';
@@ -68,9 +77,13 @@ const Hr = () => {
       link.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(link);
+
+      toast.success("PDF downloaded successfully");
     } catch (error) {
       console.error("PDF Generation Error:", error);
-      alert("Error generating PDF. Please try again.");
+      toast.error("Error generating PDF");
+    } finally {
+      setPdfLoadingId(null); // Stop loader
     }
   };
 
@@ -83,21 +96,20 @@ const Hr = () => {
     try {
       await axios.delete(`${apiUrl}/offerletters/${id}`);
       setOfferLetters(offerLetters.filter(letter => letter.id !== id));
+      toast.success("Offer letter deleted");
     } catch (error) {
       console.error("Error deleting offer letter:", error);
-      alert("Error deleting offer letter. Please try again.");
+      toast.error("Error deleting offer letter");
     } finally {
       setDeletingId(null);
     }
   };
 
-  // Format salary with commas
   const formatSalary = (salary) => {
     if (!salary) return '-';
     return `₹${Number(salary).toLocaleString('en-IN')}`;
   };
 
-  // Format date
   const formatDate = (dateString) => {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleDateString('en-IN', {
@@ -110,6 +122,7 @@ const Hr = () => {
   return (
     <div className="min-h-screen p-6 sm:p-6">
       <div className="max-w-7xl mx-auto">
+
         {/* Header */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
@@ -119,9 +132,10 @@ const Hr = () => {
           <p className="text-gray-600 ml-11">Manage offer letters and templates efficiently</p>
         </div>
 
-        {/* Action Cards Grid */}
+        {/* Action Cards */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Generate Offer Letter Card */}
+
+          {/* Generate Offer Letter */}
           <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
             <div className="flex items-center mb-4">
               <div className="p-3 bg-blue-100 rounded-xl mr-4">
@@ -141,7 +155,7 @@ const Hr = () => {
             </button>
           </div>
 
-          {/* Add Template Card */}
+          {/* Templates */}
           <div className="bg-white rounded-2xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
             <div className="flex items-center mb-4">
               <div className="p-3 bg-green-100 rounded-xl mr-4">
@@ -162,8 +176,9 @@ const Hr = () => {
           </div>
         </div>
 
-        {/* Offer Letters Table */}
+        {/* Offer Letter Table */}
         <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6 border border-gray-200">
+
           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
             <div>
               <h2 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
@@ -227,53 +242,68 @@ const Hr = () => {
                       </th>
                     </tr>
                   </thead>
+
                   <tbody className="bg-white divide-y divide-gray-200">
                     {offerLetters.map((letter) => (
-                      <tr 
-                        key={letter.id} 
-                        className="hover:bg-gray-50 transition-colors duration-150"
-                      >
+                      <tr key={letter.id} className="hover:bg-gray-50">
+                        
+                        {/* Employee */}
                         <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-3">
-                            <div className="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
+                            <div className="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
                               <FaIdCard className="h-5 w-5 text-blue-600" />
                             </div>
                             <div>
                               <div className="text-sm font-medium text-gray-900">
                                 {letter.employee_name}
                               </div>
-                              <div className="text-xs text-gray-500 flex items-center gap-1">
-                                <span>ID: {letter.id}</span>
-                              </div>
+                              <div className="text-xs text-gray-500">ID: {letter.id}</div>
                             </div>
                           </div>
                         </td>
-                        <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+
+                        {/* Position */}
+                        <td className="px-4 sm:px-6 py-4">
                           <div className="text-sm text-gray-900">{letter.position}</div>
                         </td>
-                        <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900 bg-blue-50 px-2 py-1 rounded-md inline-block">
+
+                        {/* Joining Date */}
+                        <td className="px-4 sm:px-6 py-4">
+                          <div className="text-sm bg-blue-50 px-2 py-1 rounded-md inline-block">
                             {formatDate(letter.joining_date)}
                           </div>
                         </td>
-                        <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+
+                        {/* Salary */}
+                        <td className="px-4 sm:px-6 py-4">
                           <div className="text-sm font-semibold text-green-600 bg-green-50 px-2 py-1 rounded-md inline-block">
                             {formatSalary(letter.salary)}
                           </div>
                         </td>
-                        <td className="px-4 sm:px-6 py-4 whitespace-nowrap">
+
+                        {/* Actions */}
+                        <td className="px-4 sm:px-6 py-4">
                           <div className="flex items-center gap-2">
+
+                            {/* View PDF */}
                             <button
                               onClick={() => viewPDF(letter.final_html)}
-                              className="inline-flex items-center px-3 py-2 border border-blue-300 text-sm leading-4 font-medium rounded-lg text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors duration-200"
+                              disabled={pdfLoadingId === letter.final_html}
+                              className="inline-flex items-center px-3 py-2 border border-blue-300 text-sm font-medium rounded-lg text-blue-700 bg-blue-50 hover:bg-blue-100 disabled:opacity-50"
                             >
-                              <FaEye className="h-3 w-3 mr-1" />
-                              View PDF
+                              {pdfLoadingId === letter.final_html ? (
+                                <FaSpinner className="h-3 w-3 mr-1 animate-spin" />
+                              ) : (
+                                <FaEye className="h-3 w-3 mr-1" />
+                              )}
+                              Download PDF
                             </button>
+
+                            {/* Delete */}
                             <button
                               onClick={() => deleteOfferLetter(letter.id)}
                               disabled={deletingId === letter.id}
-                              className="inline-flex items-center px-3 py-2 border border-red-300 text-sm leading-4 font-medium rounded-lg text-red-700 bg-red-50 hover:bg-red-100 transition-colors duration-200 disabled:opacity-50"
+                              className="inline-flex items-center px-3 py-2 border border-red-300 text-sm font-medium rounded-lg text-red-700 bg-red-50 hover:bg-red-100 disabled:opacity-50"
                             >
                               {deletingId === letter.id ? (
                                 <FaSpinner className="h-3 w-3 mr-1 animate-spin" />
@@ -282,15 +312,19 @@ const Hr = () => {
                               )}
                               Delete
                             </button>
+
                           </div>
                         </td>
+
                       </tr>
                     ))}
                   </tbody>
+
                 </table>
               </div>
             </div>
           )}
+
         </div>
       </div>
 
@@ -303,6 +337,7 @@ const Hr = () => {
           onSuccess={() => {
             setShowPopup(false);
             fetchData();
+            toast.success("Offer Letter Created Successfully");
           }}
         />
       )}

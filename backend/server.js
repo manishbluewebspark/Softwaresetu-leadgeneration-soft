@@ -30,6 +30,9 @@ app.use(cors(corsOptions));
 app.use(express.json());
 
 
+app.use("/api/uploads", express.static("uploads"));
+
+
 app.get("/api/health", async (_req, res) => {
   try {
     const [rows] = await pool.query("SELECT 1+1 AS two");
