@@ -1,0 +1,107 @@
+/* A4Editor.css */
+
+/* A4 Container */
+.a4-container {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+/* A4 Editor */
+.a4-editor {
+  width: 210mm; /* A4 width */
+  min-height: 297mm; /* A4 height */
+  background: white;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  margin: 0 auto;
+  padding: 20mm; /* Standard margins */
+  box-sizing: border-box;
+  position: relative;
+}
+
+/* Quill editor styling */
+.ql-editor {
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 12pt;
+  line-height: 1.5;
+  color: #000;
+  background: white;
+  min-height: 257mm; /* Account for padding */
+  box-sizing: border-box;
+  position: relative;
+}
+
+/* Page break simulation */
+.page-break-before {
+  break-before: page;
+  margin-top: 20mm;
+  padding-top: 10mm;
+  border-top: 1px dashed #ccc;
+}
+
+/* Ensure proper display of content */
+.ql-snow .ql-editor {
+  background: white !important;
+  color: black !important;
+}
+
+/* Editor container */
+.editor-container {
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+/* Preview in template list */
+.a4-preview .ql-editor {
+  width: 100%;
+  min-height: auto;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 15px;
+  background: white;
+}
+
+/* Quill toolbar styling */
+.ql-toolbar.ql-snow {
+  border: 1px solid #ccc;
+  border-bottom: none;
+  background: #f8f9fa;
+}
+
+.ql-container.ql-snow {
+  border: 1px solid #ccc;
+  border-top: none;
+}
+
+/* Fix for black screen issue */
+.ql-editor p,
+.ql-editor h1,
+.ql-editor h2,
+.ql-editor h3,
+.ql-editor h4,
+.ql-editor h5,
+.ql-editor h6,
+.ql-editor ul,
+.ql-editor ol,
+.ql-editor blockquote {
+  color: #000 !important;
+}
+
+/* Print styles */
+@media print {
+  .a4-editor {
+    box-shadow: none;
+    margin: 0;
+    padding: 20mm;
+  }
+  
+  .page-break-before {
+    break-before: always;
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+  }
+}
