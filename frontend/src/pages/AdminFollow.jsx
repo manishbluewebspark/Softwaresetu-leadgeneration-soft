@@ -405,41 +405,102 @@ export default function AdminFollow() {
   }, []);
 
   // ✅ Fetch Lead Data (Follow Up only)
-  useEffect(() => {
-    const fetchFollowupData = async () => {
-      try {
-        const res = await axios.get(`${apiUrl}/customers/get-lead-data`);
-        const filteredData = res.data.filter(
-          // (item) => item.status?.toLowerCase() === "follow up"
-          (item) =>
-  item.status?.toLowerCase() === "follow up" ||
-  item.status?.toLowerCase() === "demo"
-        );
+  // useEffect(() => {
+  //   const fetchFollowupData = async () => {
+  //     try {
+  //       const res = await axios.get(`${apiUrl}/customers/get-lead-data`);
+  //       const filteredData = res.data.filter(
+  //         // (item) => item.status?.toLowerCase() === "follow up"
+  //         (item) =>
+  // item.status?.toLowerCase() === "follow up" ||
+  // item.status?.toLowerCase() === "demo"
+  //       );
 
-        const grouped = {};
-        filteredData.forEach((item) => {
-          const dateKey = item.followup_datetime
-            ? new Date(item.followup_datetime).toLocaleDateString("en-IN", {
-                day: "2-digit",
-                month: "long",
-                year: "numeric",
-              })
-            : "No Date";
+  //       const grouped = {};
+  //       filteredData.forEach((item) => {
+  //         const dateKey = item.followup_datetime
+  //           ? new Date(item.followup_datetime).toLocaleDateString("en-IN", {
+  //               day: "2-digit",
+  //               month: "long",
+  //               year: "numeric",
+  //             })
+  //           : "No Date";
 
-          if (!grouped[dateKey]) grouped[dateKey] = [];
-          grouped[dateKey].push(item);
-        });
+  //         if (!grouped[dateKey]) grouped[dateKey] = [];
+  //         grouped[dateKey].push(item);
+  //       });
 
-        setGroupedData(grouped);
-        setGroupedCopyData(grouped);
-      } catch (err) {
-        console.error("Error fetching lead data:", err);
-        toast.error("Failed to load customer data");
-      }
-    };
+  //       setGroupedData(grouped);
+  //       setGroupedCopyData(grouped);
+  //     } catch (err) {
+  //       console.error("Error fetching lead data:", err);
+  //       toast.error("Failed to load customer data");
+  //     }
+  //   };
 
-    fetchFollowupData();
-  }, [isChange]);
+  //   fetchFollowupData();
+  // }, [isChange]);
+
+useEffect(() => {
+  const fetchFollowupData = async () => {
+    try {
+      const res = await axios.get(`${apiUrl}/customers/get-lead-data`);
+      
+      // Pehle "Follow Up" aur "Demo" status wale data ko filter karo
+      const filteredData = res.data.filter(
+        (item) =>
+          item.status?.toLowerCase() === "follow up" ||
+          item.status?.toLowerCase() === "demo"
+      );
+
+      // Mobile number ke basis par group banao aur latest entry rakho
+      const mobileMap = {};
+      
+      filteredData.forEach((item) => {
+        let mobile = item.mobile;
+        
+        // Agar number 12-digit ka hai aur '91' se start hota hai, toh '91' hata do
+        if (mobile.length === 12 && mobile.startsWith('91')) {
+          mobile = mobile.substring(2); // Pehle 2 characters hata do
+        }
+        
+        // Agar yeh mobile pehle se nahi hai, ya fir yeh entry latest hai
+        if (!mobileMap[mobile] || 
+            new Date(item.updated_at) > new Date(mobileMap[mobile].updated_at)) {
+          mobileMap[mobile] = item;
+        }
+      });
+
+      // Sirf unique mobile numbers wali entries lo
+      const uniqueData = Object.values(mobileMap);
+
+      // Ab date ke hisaab se group karo
+      const grouped = {};
+      uniqueData.forEach((item) => {
+        const dateKey = item.followup_datetime
+          ? new Date(item.followup_datetime).toLocaleDateString("en-IN", {
+              day: "2-digit",
+              month: "long",
+              year: "numeric",
+            })
+          : "No Date";
+
+        if (!grouped[dateKey]) grouped[dateKey] = [];
+        grouped[dateKey].push(item);
+      });
+
+      setGroupedData(grouped);
+      setGroupedCopyData(grouped);
+    } catch (err) {
+      console.error("Error fetching lead data:", err);
+      toast.error("Failed to load customer data");
+    }
+  };
+
+  fetchFollowupData();
+}, [isChange]);
+
+
 
   // ✅ Fetch all statuses
   useEffect(() => {
@@ -611,7 +672,7 @@ export default function AdminFollow() {
                         <div className="flex justify-between items-center gap-3">
                           <span>{item.comment}</span>
                           <div className="flex gap-2">
-                            <button
+                            {/* <button
                               className="hover:bg-gray-200 rounded p-2"
                               onClick={() =>
                                 setNoteModalData({
@@ -621,7 +682,7 @@ export default function AdminFollow() {
                               title="Add Note"
                             >
                               <NotebookPen className="w-5 h-5 text-gray-600" />
-                            </button>
+                            </button> */}
 
                             <button
                               className="hover:bg-gray-200 rounded p-2"

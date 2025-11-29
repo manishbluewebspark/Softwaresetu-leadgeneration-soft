@@ -445,47 +445,119 @@ export default function FollowUp() {
   }, []);
 
   // ✅ Fetch FollowUp data grouped by date
-  useEffect(() => {
-    const fetchFollowUpData = async () => {
-      try {
-        const token = localStorage.getItem("token");
-        const employeeId = userss?.id;
-        if (!employeeId) return;
+  // useEffect(() => {
+  //   const fetchFollowUpData = async () => {
+  //     try {
+  //       const token = localStorage.getItem("token");
+  //       const employeeId = userss?.id;
+  //       if (!employeeId) return;
 
-        const { data } = await axios.get(`${apiUrl}/employee/status/data`, {
-          headers: { Authorization: `Bearer ${token}` },
-          params: { employeeId, status: "Follow Up" },
-        });
+  //       const { data } = await axios.get(`${apiUrl}/employee/status/data`, {
+  //         headers: { Authorization: `Bearer ${token}` },
+  //         params: { employeeId, status: "Follow Up" },
+  //       });
 
-        // Filter by Follow Up (status_id == 4)
-        const filteredData = data.data.filter((item) => item.status_id == 4 || 1);
-        const leads = filteredData || [];
+  //       // Filter by Follow Up (status_id == 4)
+  //       const filteredData = data.data.filter((item) => item.status_id == 4 || 1);
+  //       const leads = filteredData || [];
 
-        // Group by date
-        const grouped = {};
-        leads.forEach((item) => {
-          const dateKey = item.followup_datetime
-            ? new Date(item.followup_datetime).toLocaleDateString("en-IN", {
-                day: "2-digit",
-                month: "long",
-                year: "numeric",
-              })
-            : "No Date";
+  //       // Group by date
+  //       const grouped = {};
+  //       leads.forEach((item) => {
+  //         const dateKey = item.followup_datetime
+  //           ? new Date(item.followup_datetime).toLocaleDateString("en-IN", {
+  //               day: "2-digit",
+  //               month: "long",
+  //               year: "numeric",
+  //             })
+  //           : "No Date";
 
-          if (!grouped[dateKey]) grouped[dateKey] = [];
-          grouped[dateKey].push(item);
-        });
+  //         if (!grouped[dateKey]) grouped[dateKey] = [];
+  //         grouped[dateKey].push(item);
+  //       });
 
-        setGroupedData(grouped);
-        setGroupedCopyData(grouped);
-      } catch (err) {
-        console.error("Error fetching follow-up data:", err);
-        toast.error("Failed to load customer data");
-      }
-    };
+  //       setGroupedData(grouped);
+  //       setGroupedCopyData(grouped);
+  //     } catch (err) {
+  //       console.error("Error fetching follow-up data:", err);
+  //       toast.error("Failed to load customer data");
+  //     }
+  //   };
 
-    fetchFollowUpData();
-  }, [isChange]);
+  //   fetchFollowUpData();
+  // }, [isChange]);
+
+
+
+// ✅ Fetch FollowUp data grouped by date
+useEffect(() => {
+  const fetchFollowUpData = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const employeeId = userss?.id;
+      if (!employeeId) return;
+
+      const { data } = await axios.get(`${apiUrl}/employee/status/data`, {
+        headers: { Authorization: `Bearer ${token}` },
+        params: { employeeId, status: "Follow Up" },
+      });
+
+      // Filter by Follow Up (status_id == 4) and Demo (status_id == 1)
+      const filteredData = data.data.filter((item) => 
+        item.status_id == 4 || item.status_id == 1
+      );
+      
+      // Mobile number ke basis par group banao aur latest entry rakho
+      const mobileMap = {};
+      
+      filteredData.forEach((item) => {
+        let mobile = item.mobile;
+        
+        // Agar number 12-digit ka hai aur '91' se start hota hai, toh '91' hata do
+        if (mobile && mobile.length === 12 && mobile.startsWith('91')) {
+          mobile = mobile.substring(2); // Pehle 2 characters hata do
+        }
+        
+        // Agar yeh mobile pehle se nahi hai, ya fir yeh entry latest hai
+        if (!mobileMap[mobile] || 
+            new Date(item.updated_at) > new Date(mobileMap[mobile].updated_at)) {
+          mobileMap[mobile] = item;
+        }
+      });
+
+      // Sirf unique mobile numbers wali entries lo
+      const uniqueData = Object.values(mobileMap);
+
+      // Ab date ke hisaab se group karo
+      const grouped = {};
+      uniqueData.forEach((item) => {
+        const dateKey = item.followup_datetime
+          ? new Date(item.followup_datetime).toLocaleDateString("en-IN", {
+              day: "2-digit",
+              month: "long",
+              year: "numeric",
+            })
+          : "No Date";
+
+        if (!grouped[dateKey]) grouped[dateKey] = [];
+        grouped[dateKey].push(item);
+      });
+
+      setGroupedData(grouped);
+      setGroupedCopyData(grouped);
+    } catch (err) {
+      console.error("Error fetching follow-up data:", err);
+      toast.error("Failed to load customer data");
+    }
+  };
+
+  fetchFollowUpData();
+}, [isChange]);
+
+
+
+
+
 
   // ✅ Fetch statuses
   useEffect(() => {
@@ -646,7 +718,7 @@ export default function FollowUp() {
                         <div className="flex justify-between items-center gap-3">
                           <span>{item.comment}</span>
                           <div className="flex gap-2">
-                            <button
+                            {/* <button
                               className="hover:bg-gray-200 rounded p-2"
                               onClick={() =>
                                 setNoteModalData({
@@ -656,7 +728,7 @@ export default function FollowUp() {
                               title="Add Note"
                             >
                               <NotebookPen className="w-5 h-5 text-gray-600" />
-                            </button>
+                            </button> */}
                             <button
                               className="hover:bg-gray-200 rounded p-2"
                               onClick={() =>
