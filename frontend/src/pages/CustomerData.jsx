@@ -44,6 +44,7 @@ export default function CustomerData() {
   const [filterType, setFilterType] = useState('')
   const [loadingAssign, setLoadingAssign] = useState(false);
   const [sources, setSources] = useState([]);
+  const [paginationPageSize, setPaginationPageSize] = useState(1000);
 
 
   const [isChange, setIsChange] = useState(false)
@@ -672,7 +673,8 @@ useEffect(() => {
   columnDefs={columnDefs}
   defaultColDef={defaultColDef}
   pagination={true}
-  paginationPageSize={100}
+  paginationPageSize={paginationPageSize} 
+  paginationPageSizeSelector={[25, 50, 100, 500, 1000]}
   animateRows={true}
   onGridReady={onGridReady}
   onFirstDataRendered={onFirstDataRendered}
