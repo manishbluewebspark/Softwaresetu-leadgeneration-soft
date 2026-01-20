@@ -7,6 +7,7 @@ const router = Router();
 router.get('/history', AcivateHistoryForAdmin);
 
 
+
 router.get('/:id', AcivateHistoryForUser);
 
 router.post("/customer-notes/:customer_id", saveCustomerNotes);

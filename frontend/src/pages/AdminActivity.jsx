@@ -469,6 +469,8 @@
 
 
 
+
+
 import { useEffect, useState, useMemo, forwardRef } from "react";
 import axios from "axios";
 import { AgGridReact } from "ag-grid-react";
@@ -509,6 +511,8 @@ export default function AdminActivity() {
   const [selectedUpdatedBy, setSelectedUpdatedBy] = useState("All");
   const [fromDate, setFromDate] = useState(new Date());
   const [toDate, setToDate] = useState(new Date());
+
+
   const [statusFullData, setStatusFullData] = useState([]);
   const [isChange, setIsChange] = useState(false);
   const [statusData, setStatusData] = useState([]);
@@ -729,43 +733,99 @@ title="View Comments"
   []
 );
 
-  useEffect(() => {
-    const fetchHistory = async () => {
-      try {
-        const res = await axios.get(`${apiUrl}/activity/history`);
-        const latestMap = {};
-        res.data.forEach((item) => {
-          if (
-            !latestMap[item.customer_id] ||
-            new Date(item.updated_at) >
-              new Date(latestMap[item.customer_id].updated_at)
-          ) {
-            latestMap[item.customer_id] = item;
-          }
-        });
 
-        const uniqueLatest = Object.values(latestMap);
 
-        // ✅ master-detail me history attach karna
-        uniqueLatest.forEach((item) => {
-          item.history = res.data.filter(
-            (h) => h.customer_id === item.customer_id
-          );
-        });
+  // useEffect(() => {
+  //   const fetchHistory = async () => {
+  //     try {
+  //       const res = await axios.get(`${apiUrl}/activity/history`);
+  //       const latestMap = {};
+  //       res.data.forEach((item) => {
+  //         if (
+  //           !latestMap[item.customer_id] ||
+  //           new Date(item.updated_at) >
+  //             new Date(latestMap[item.customer_id].updated_at)
+  //         ) {
+  //           latestMap[item.customer_id] = item;
+  //         }
+  //       });
 
-        setRowData(res.data);
-        setCopyRowData(uniqueLatest)
-        setFilteredData(uniqueLatest);
+  //       const uniqueLatest = Object.values(latestMap);
 
-        const uniqueUsers = [...new Set(res.data.map((item) => item.updated_by))];
-        setUpdatedByList(uniqueUsers);
-      } catch (error) {
-        console.error("Error fetching history:", error);
+  //       // ✅ master-detail me history attach karna
+  //       uniqueLatest.forEach((item) => {
+  //         item.history = res.data.filter(
+  //           (h) => h.customer_id === item.customer_id
+  //         );
+  //       });
+
+  //       setRowData(res.data);
+  //       setCopyRowData(uniqueLatest)
+  //       setFilteredData(uniqueLatest);
+
+  //       const uniqueUsers = [...new Set(res.data.map((item) => item.updated_by))];
+  //       setUpdatedByList(uniqueUsers);
+  //     } catch (error) {
+  //       console.error("Error fetching history:", error);
+  //     }
+  //   };
+
+  //   fetchHistory();
+  // }, [apiUrl]);
+
+
+const fetchHistory = async () => {
+  try {
+    // Prepare query parameters
+    const params = {};
+    
+    if (selectedUpdatedBy !== "All") {
+      params.updatedBy = selectedUpdatedBy;
+    }
+    
+    // Format dates to YYYY-MM-DD
+    const from = fromDate ? fromDate.toISOString().split('T')[0] : '';
+    const to = toDate ? toDate.toISOString().split('T')[0] : '';
+    
+    if (from) params.fromDate = from;
+    if (to) params.toDate = to;
+
+    // Make API call with parameters
+    const res = await axios.get(`${apiUrl}/activity/history`, {
+      params: params
+    });
+
+    const latestMap = {};
+    res.data.forEach((item) => {
+      if (
+        !latestMap[item.customer_id] ||
+        new Date(item.updated_at) >
+          new Date(latestMap[item.customer_id].updated_at)
+      ) {
+        latestMap[item.customer_id] = item;
       }
-    };
+    });
 
-    fetchHistory();
-  }, [apiUrl]);
+    const uniqueLatest = Object.values(latestMap);
+
+    uniqueLatest.forEach((item) => {
+      item.history = res.data.filter(
+        (h) => h.customer_id === item.customer_id
+      );
+    });
+
+    setRowData(res.data);
+    setCopyRowData(uniqueLatest);
+    setFilteredData(uniqueLatest);
+
+    const uniqueUsers = [...new Set(res.data.map((item) => item.updated_by))];
+    setUpdatedByList(uniqueUsers);
+  } catch (error) {
+    console.error("Error fetching history:", error);
+  }
+};
+
+
 
   const filterData = () => {
     let filtered = [...rowData];
@@ -789,7 +849,18 @@ title="View Comments"
     });
 
     setFilteredData(filtered);
+      fetchHistory();
   };
+
+
+
+  useEffect(() => {
+  // Fetch data whenever date filters change
+  if (fromDate && toDate) {
+    fetchHistory();
+  }
+}, [fromDate, toDate, selectedUpdatedBy]);
+
 
   const CustomDateInput = forwardRef(
     ({ value, onClick, placeholder }, ref) => (

@@ -18,15 +18,64 @@ export const AcivateHistoryForUser = async (req, res) => {
 };
 
 
+// export const AcivateHistoryForAdmin = async (req, res) => {
+//   try {
+//     const result = await pool.query(`SELECT * FROM lead_history ORDER BY updated_at DESC`);
+//     return res.status(200).json(result.rows);
+//   } catch (error) {
+//     console.error("Error fetching user history:", error);
+//     return res.status(500).json({ message: "Server error" });
+//   }
+// };
+
+
+
 export const AcivateHistoryForAdmin = async (req, res) => {
   try {
-    const result = await pool.query(`SELECT * FROM lead_history ORDER BY updated_at DESC`);
+    // Get query parameters from frontend
+    const { fromDate, toDate, updatedBy } = req.query;
+    
+    let query = `SELECT * FROM lead_history WHERE 1=1`;
+    const queryParams = [];
+    let paramIndex = 1;
+
+    // If fromDate is provided
+    if (fromDate) {
+      query += ` AND DATE(created_at) >= $${paramIndex}`;
+      queryParams.push(fromDate);
+      paramIndex++;
+    }
+
+    // If toDate is provided
+    if (toDate) {
+      query += ` AND DATE(created_at) <= $${paramIndex}`;
+      queryParams.push(toDate);
+      paramIndex++;
+    }
+
+    // If updatedBy is provided (and not "All")
+    if (updatedBy && updatedBy !== "All") {
+      query += ` AND updated_by = $${paramIndex}`;
+      queryParams.push(updatedBy);
+      paramIndex++;
+    }
+
+    // If no date filters provided, default to current day
+    if (!fromDate && !toDate) {
+      query += ` AND DATE(created_at) = CURRENT_DATE`;
+    }
+
+    query += ` ORDER BY created_at DESC`;
+
+    const result = await pool.query(query, queryParams);
     return res.status(200).json(result.rows);
   } catch (error) {
     console.error("Error fetching user history:", error);
     return res.status(500).json({ message: "Server error" });
   }
 };
+
+
 
 
 
