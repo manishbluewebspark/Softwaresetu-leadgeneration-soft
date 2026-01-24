@@ -36,6 +36,7 @@ export default function CustomerData() {
   const [noteModalData, setNoteModalData] = useState(null);
   const [quickFilterText, setQuickFilterText] = useState("");
   const [data, setData] = useState([]);
+  console.log(data,100000)
   const [copyData, setCopyData] = useState([]);
   const [copyChekingData, setChekingCopyData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -54,6 +55,7 @@ export default function CustomerData() {
   const [selectedBatch, setSelectedBatch] = useState(null);
   const [limit, setLimit] = useState("");
   const [employees, setEmployees] = useState([]);
+  
   const [selectedEmployees, setSelectedEmployees] = useState([]);
   const [statusData, setStatusData] = useState([]);
   const [statusFullData, setStatusFullData] = useState([]);
@@ -246,6 +248,7 @@ useEffect(() => {
     </div>
   ),
 },
+  { headerName: "Source", field: "source_name" },
       { headerName: "Status", field: "status" },
       {
         headerName: "Comment",

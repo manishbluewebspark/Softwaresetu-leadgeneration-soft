@@ -542,32 +542,50 @@ export const changeStatus = async (req, res) => {
 };
 
 
+// export const leadData = async (req, res) => {
+//   try {
+   
+
+//     const result = await pool.query(`
+//   SELECT lh.*, ac.*
+//   FROM lead_history lh
+//   INNER JOIN (
+//       SELECT name, address, mobile, MAX(id) AS max_id
+//       FROM lead_history
+//       GROUP BY name, address, mobile
+//   ) AS uniq
+//     ON lh.id = uniq.max_id
+//   INNER JOIN assining_customers ac
+//     ON lh.customer_id = ac.customer_id
+// `);
+
+
+//     res.status(200).json(result.rows);
+//   } catch (err) {
+//     console.error("Error getting data:", err);
+//     res.status(500).json({ message: "Internal server error" });
+//   }
+// };
+
 export const leadData = async (req, res) => {
   try {
-    // const result = await pool.query(`
-    //   SELECT lh.*
-    //   FROM lead_history lh
-    //   INNER JOIN (
-    //       SELECT name, address, mobile, MAX(id) AS max_id
-    //       FROM lead_history
-    //       GROUP BY name, address, mobile
-    //   ) AS uniq
-    //   ON lh.id = uniq.max_id
-    // `);
-
     const result = await pool.query(`
-  SELECT lh.*, ac.*
-  FROM lead_history lh
-  INNER JOIN (
-      SELECT name, address, mobile, MAX(id) AS max_id
-      FROM lead_history
-      GROUP BY name, address, mobile
-  ) AS uniq
-    ON lh.id = uniq.max_id
-  INNER JOIN assining_customers ac
-    ON lh.customer_id = ac.customer_id
-`);
-
+      SELECT 
+        lh.*, 
+        ac.*,
+        b.* 
+      FROM lead_history lh
+      INNER JOIN (
+          SELECT name, address, mobile, MAX(id) AS max_id
+          FROM lead_history
+          GROUP BY name, address, mobile
+      ) AS uniq
+        ON lh.id = uniq.max_id
+      INNER JOIN assining_customers ac
+        ON lh.customer_id = ac.customer_id
+      LEFT JOIN batches b
+        ON ac.batch_id = b.batch_id
+    `);
 
     res.status(200).json(result.rows);
   } catch (err) {
@@ -575,6 +593,7 @@ export const leadData = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
+
 
 
 

@@ -932,6 +932,7 @@ export default function Demo() {
                   <tr className="border-b">
                     <th className="border px-3 py-2">Name</th>
                     <th className="border px-3 py-2">Mobile</th>
+                     <th className="border px-3 py-2">Source</th>
                     <th className="border px-3 py-2">Time</th>
                     <th className="border px-3 py-2">Comment / Note</th>
                     <th className="border px-3 py-2">Updated By</th>
@@ -945,6 +946,7 @@ export default function Demo() {
                     <tr key={idx} className="border-b bg-white">
                       <td className="border px-3 py-2">{item.name}</td>
                       <td className="border px-3 py-2">{item.mobile}</td>
+                      <td className="border px-3 py-2">{item.source_name}</td>
 
                       <td className="border px-3 py-2">
                         {item.updated_at

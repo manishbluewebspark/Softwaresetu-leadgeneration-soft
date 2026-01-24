@@ -490,6 +490,10 @@ export default function DealStatusMonthly() {
     const [loading, setLoading] = useState(false);
     const [modalOpen, setModalOpen] = useState(false);
     const [selectedMonthData, setSelectedMonthData] = useState(null);
+
+    console.log(selectedMonthData,'selectedMonthData...')
+    
+
     
     // Get current user from localStorage
     const [currentUser, setCurrentUser] = useState(null);

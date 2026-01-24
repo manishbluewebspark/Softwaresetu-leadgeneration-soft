@@ -122,6 +122,7 @@ export default function Deal() {
       { headerName: "NAME", field: "name", sortable: true, filter: true },
       // { headerName: "EMAIL", field: "email", sortable: true, filter: true },
       { headerName: "MOBILE", field: "mobile", sortable: true, filter: true },
+       { headerName: "Source", field: "source_name", sortable: true, filter: true },
       {
         headerName: "Comment",
         field: "comment",

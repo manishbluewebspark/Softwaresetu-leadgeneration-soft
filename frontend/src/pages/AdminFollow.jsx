@@ -631,6 +631,7 @@ useEffect(() => {
                   <tr className="border-b">
                     <th className="border px-3 py-2 text-left w-20">Name</th>
                     <th className="border px-3 py-2 text-left w-15">Mobile</th>
+                    <th className="border px-3 py-2 text-left w-15">Source</th>
                     <th className="border px-3 py-2 text-left w-12">Time</th>
                     <th className="border px-3 py-2 text-left w-80">
                       Comment / Note
@@ -657,6 +658,7 @@ useEffect(() => {
   )}
 </td>
                       <td className="border px-3 py-2 w-32">{item.mobile}</td>
+                      <td className="border px-3 py-2 w-32">{item.source_name}</td>
                       <td className="border px-3 py-2 w-28">
                         {item.followup_datetime
                           ? new Date(
