@@ -68,6 +68,149 @@ import { pool } from "../config/db.js";
 // };
 
 
+// export const uploadExcel = async (req, res) => {
+//   const client = await pool.connect();
+//   try {
+//     if (!req.file) {
+//       return res.status(400).json({ message: "No file uploaded" });
+//     }
+//     if (!req.body.source_name) {
+//       return res.status(400).json({ message: "Source name is required" });
+//     }
+
+//     // Read Excel file
+//     const workbook = read(req.file.buffer, { type: "buffer" });
+//     const sheetName = workbook.SheetNames[0];
+//     const sheet = workbook.Sheets[sheetName];
+//     let data = utils.sheet_to_json(sheet, { defval: "" });
+
+//     // Normalize keys to lowercase and trim
+//     data = data.map((row) => {
+//       const normalized = {};
+//       for (let key in row) {
+//         const newKey = key.toString().trim().toLowerCase();
+//         normalized[newKey] = row[key];
+//       }
+//       return normalized;
+//     });
+
+//     // Start transaction
+//     await client.query("BEGIN");
+
+//     // Insert into batches and get batch ID (inside transaction)
+//     // const batchResult = await client.query(
+//     //   "INSERT INTO batches (source_name) VALUES ($1) RETURNING batch_id",
+//     //   [req.body.source_name]
+//     // );
+//     const batchResult = await client.query(
+//   "INSERT INTO batches (source_name, description) VALUES ($1, $2) RETURNING batch_id",
+//   [req.body.source_name, req.body.description || ""]
+// );
+
+//     if (batchResult.rows.length === 0) {
+//       throw new Error("Failed to insert batch");
+//     }
+//     const batchId = batchResult.rows[0].batch_id;
+
+//     // Prepare customer values (and normalize mobile to digits only)
+//     const prepared = data.map((row) => {
+//       const name = row.name || row["full name"] || row["fullname"] || "";
+//       const email = row.email || row["e-mail"] || row.mail || "";
+//       let mobile = row.mobile || row.phone || "";
+//       if (mobile || mobile === 0) {
+//         mobile = mobile.toString().replace(/\D/g, ""); // keep only digits
+//       } else {
+//         mobile = "";
+//       }
+//       const address = row.address || row.location || "";
+//       const status = "Pending";
+//       const status_id = 5;
+//       return { batchId, name, email, mobile, address, status, status_id };
+//     });
+
+//     // Collect mobiles that are non-empty for duplicate-check
+//     const mobilesToCheck = Array.from(
+//       new Set(prepared
+//         .map((p) => (p.mobile && p.mobile.length > 0 ? p.mobile : null))
+//         .filter(Boolean))
+//     ); // unique, non-empty mobiles
+
+//     // Query DB for existing mobiles (only if there are mobiles to check)
+//     let existingMobileSet = new Set();
+//     if (mobilesToCheck.length > 0) {
+//       // Use ANY($1::text[]) to pass an array param
+//       const existingRes = await client.query(
+//         "SELECT mobile FROM customers WHERE mobile = ANY($1::text[])",
+//         [mobilesToCheck]
+//       );
+//       existingRes.rows.forEach((r) => {
+//         if (r.mobile) existingMobileSet.add(r.mobile.toString());
+//       });
+//     }
+
+//     // Filter out prepared rows whose mobile is already present
+//     const toInsert = prepared.filter((p) => {
+//       // If mobile is empty string, we allow insert (based on your original logic).
+//       // If you want to skip empty mobiles as duplicates or require mobiles, change this behavior.
+//       if (!p.mobile || p.mobile.length === 0) return true;
+//       return !existingMobileSet.has(p.mobile.toString());
+//     });
+
+//     if (toInsert.length === 0) {
+//       // nothing to insert, commit the transaction (we still keep the batch)
+//       await client.query("COMMIT");
+//       return res.json({
+//         message: "Excel uploaded successfully — but no new customers to insert (all mobiles existed).",
+//         batchId,
+//         inserted: 0,
+//         skipped: prepared.length,
+//       });
+//     }
+
+//     // Build bulk insert placeholders and values
+//     // Each row has 7 columns: batch_id, name, email, mobile, address, status, status_id
+//     const placeholders = toInsert
+//       .map((_, i) => {
+//         const base = i * 7;
+//         return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7})`;
+//       })
+//       .join(", ");
+
+//     const flatValues = toInsert.flatMap((p) => [
+//       p.batchId,
+//       p.name,
+//       p.email,
+//       p.mobile,
+//       p.address,
+//       p.status,
+//       p.status_id,
+//     ]);
+
+//     await client.query(
+//       `INSERT INTO customers (batch_id, name, email, mobile, address, status, status_id) VALUES ${placeholders}`,
+//       flatValues
+//     );
+
+//     await client.query("COMMIT");
+
+//     // Stats for response
+//     const skippedCount = prepared.length - toInsert.length;
+//     res.json({
+//       message: "Excel uploaded successfully",
+//       batchId,
+//       inserted: toInsert.length,
+//       skipped: skippedCount,
+//     });
+//   } catch (err) {
+//     await client.query("ROLLBACK").catch(() => {});
+//     console.error("Error uploading excel:", err);
+//     res.status(500).json({ message: "Error uploading excel", error: err.message });
+//   } finally {
+//     client.release();
+//   }
+// };
+
+
 export const uploadExcel = async (req, res) => {
   const client = await pool.connect();
   try {
@@ -82,13 +225,15 @@ export const uploadExcel = async (req, res) => {
     const workbook = read(req.file.buffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
-    let data = utils.sheet_to_json(sheet, { defval: "" });
+    let data = utils.sheet_to_json(sheet, { defval: "", raw: false });
 
     // Normalize keys to lowercase and trim
     data = data.map((row) => {
       const normalized = {};
       for (let key in row) {
-        const newKey = key.toString().trim().toLowerCase();
+        const newKey = key.toString().trim().toLowerCase()
+          .replace(/[^\w\s]/gi, '') // Remove special characters
+          .replace(/\s+/g, '_'); // Replace spaces with underscores
         normalized[newKey] = row[key];
       }
       return normalized;
@@ -97,48 +242,160 @@ export const uploadExcel = async (req, res) => {
     // Start transaction
     await client.query("BEGIN");
 
-    // Insert into batches and get batch ID (inside transaction)
-    // const batchResult = await client.query(
-    //   "INSERT INTO batches (source_name) VALUES ($1) RETURNING batch_id",
-    //   [req.body.source_name]
-    // );
+    // Insert into batches and get batch ID
     const batchResult = await client.query(
-  "INSERT INTO batches (source_name, description) VALUES ($1, $2) RETURNING batch_id",
-  [req.body.source_name, req.body.description || ""]
-);
+      "INSERT INTO batches (source_name, description) VALUES ($1, $2) RETURNING batch_id",
+      [req.body.source_name, req.body.description || ""]
+    );
 
     if (batchResult.rows.length === 0) {
       throw new Error("Failed to insert batch");
     }
     const batchId = batchResult.rows[0].batch_id;
 
-    // Prepare customer values (and normalize mobile to digits only)
-    const prepared = data.map((row) => {
-      const name = row.name || row["full name"] || row["fullname"] || "";
-      const email = row.email || row["e-mail"] || row.mail || "";
-      let mobile = row.mobile || row.phone || "";
-      if (mobile || mobile === 0) {
-        mobile = mobile.toString().replace(/\D/g, ""); // keep only digits
-      } else {
-        mobile = "";
+    // Define expected column mappings with priority
+    const columnMappings = {
+      name: ['name', 'full_name', 'fullname', 'customer_name', 'client_name', 'contact_person'],
+      mobile: ['mobile', 'phone', 'contact', 'phone_number', 'contact_number', 'mobileno'],
+      email: ['email', 'e_mail', 'mail', 'email_id'],
+      address: ['address', 'location', 'city', 'area', 'street', 'full_address']
+    };
+
+    // Find actual column names in the data
+    const findColumn = (possibleNames) => {
+      for (const name of possibleNames) {
+        if (data[0] && data[0][name] !== undefined) {
+          return name;
+        }
       }
-      const address = row.address || row.location || "";
-      const status = "Pending";
-      const status_id = 5;
-      return { batchId, name, email, mobile, address, status, status_id };
+      return null;
+    };
+
+    const nameColumn = findColumn(columnMappings.name);
+    const mobileColumn = findColumn(columnMappings.mobile);
+    const emailColumn = findColumn(columnMappings.email);
+    const addressColumn = findColumn(columnMappings.address);
+
+    // Validate required columns
+    if (!nameColumn) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ 
+        message: "Excel must contain a 'Name' column", 
+        availableColumns: Object.keys(data[0] || {}) 
+      });
+    }
+
+    if (!mobileColumn) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ 
+        message: "Excel must contain a 'Mobile' or 'Phone' column",
+        availableColumns: Object.keys(data[0] || {}) 
+      });
+    }
+
+    // Prepare and validate customer data
+    const prepared = [];
+    const errors = [];
+    const duplicatesInFile = new Set();
+    const mobileSet = new Set();
+
+    data.forEach((row, index) => {
+      const rowNum = index + 2; // Excel rows are 1-indexed, header is row 1
+      
+      // Extract values with fallbacks
+      let name = (row[nameColumn] || '').toString().trim();
+      let email = emailColumn ? (row[emailColumn] || '').toString().trim().toLowerCase() : '';
+      let mobile = (row[mobileColumn] || '').toString().trim();
+      let address = addressColumn ? (row[addressColumn] || '').toString().trim() : '';
+
+      // Clean mobile number - keep only digits, remove country code if it's 91
+      if (mobile) {
+        mobile = mobile.replace(/\D/g, ''); // Remove non-digits
+        // Remove leading 91 (India code) if number is 12 digits starting with 91
+        if (mobile.length === 12 && mobile.startsWith('91')) {
+          mobile = mobile.substring(2);
+        }
+        // Remove leading 0 if present
+        if (mobile.startsWith('0')) {
+          mobile = mobile.substring(1);
+        }
+      }
+
+      // Validation rules
+      if (!name || name.length === 0) {
+        errors.push(`Row ${rowNum}: Name is required`);
+        return;
+      }
+
+      if (!mobile || mobile.length === 0) {
+        errors.push(`Row ${rowNum}: Mobile number is required`);
+        return;
+      }
+
+      if (mobile.length < 10 || mobile.length > 15) {
+        errors.push(`Row ${rowNum}: Mobile number must be 10-15 digits (got ${mobile.length})`);
+        return;
+      }
+
+      // Check for duplicate mobile within same file
+      if (mobileSet.has(mobile)) {
+        duplicatesInFile.add(mobile);
+        errors.push(`Row ${rowNum}: Duplicate mobile number in file: ${mobile}`);
+        return;
+      }
+      mobileSet.add(mobile);
+
+      // Validate email format if provided
+      if (email && !isValidEmail(email)) {
+        errors.push(`Row ${rowNum}: Invalid email format: ${email}`);
+        return;
+      }
+
+      // Truncate long values to match database constraints
+      if (name.length > 100) {
+        name = name.substring(0, 100);
+      }
+      if (address.length > 255) {
+        address = address.substring(0, 255);
+      }
+      if (email.length > 100) {
+        email = email.substring(0, 100);
+      }
+
+      prepared.push({
+        batchId,
+        name,
+        email,
+        mobile,
+        address,
+        status: "Pending",
+        status_id: 5
+      });
     });
 
-    // Collect mobiles that are non-empty for duplicate-check
-    const mobilesToCheck = Array.from(
-      new Set(prepared
-        .map((p) => (p.mobile && p.mobile.length > 0 ? p.mobile : null))
-        .filter(Boolean))
-    ); // unique, non-empty mobiles
+    // If validation errors, rollback and return errors
+    if (errors.length > 0) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        message: "Validation failed",
+        errors: errors.slice(0, 20), // Return first 20 errors only
+        totalErrors: errors.length,
+        duplicatesInFile: Array.from(duplicatesInFile)
+      });
+    }
 
-    // Query DB for existing mobiles (only if there are mobiles to check)
+    if (prepared.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ 
+        message: "No valid data to import after validation" 
+      });
+    }
+
+    // Check for duplicates in database
+    const mobilesToCheck = prepared.map(p => p.mobile);
     let existingMobileSet = new Set();
+    
     if (mobilesToCheck.length > 0) {
-      // Use ANY($1::text[]) to pass an array param
       const existingRes = await client.query(
         "SELECT mobile FROM customers WHERE mobile = ANY($1::text[])",
         [mobilesToCheck]
@@ -148,27 +405,28 @@ export const uploadExcel = async (req, res) => {
       });
     }
 
-    // Filter out prepared rows whose mobile is already present
-    const toInsert = prepared.filter((p) => {
-      // If mobile is empty string, we allow insert (based on your original logic).
-      // If you want to skip empty mobiles as duplicates or require mobiles, change this behavior.
-      if (!p.mobile || p.mobile.length === 0) return true;
-      return !existingMobileSet.has(p.mobile.toString());
+    // Separate new and duplicate records
+    const toInsert = [];
+    const duplicatesInDB = [];
+    
+    prepared.forEach((customer) => {
+      if (existingMobileSet.has(customer.mobile)) {
+        duplicatesInDB.push(customer.mobile);
+      } else {
+        toInsert.push(customer);
+      }
     });
 
     if (toInsert.length === 0) {
-      // nothing to insert, commit the transaction (we still keep the batch)
-      await client.query("COMMIT");
-      return res.json({
-        message: "Excel uploaded successfully — but no new customers to insert (all mobiles existed).",
-        batchId,
-        inserted: 0,
-        skipped: prepared.length,
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        message: "All mobile numbers already exist in database",
+        duplicates: duplicatesInDB.slice(0, 10), // Show first 10 duplicates
+        totalDuplicates: duplicatesInDB.length
       });
     }
 
-    // Build bulk insert placeholders and values
-    // Each row has 7 columns: batch_id, name, email, mobile, address, status, status_id
+    // Insert valid records
     const placeholders = toInsert
       .map((_, i) => {
         const base = i * 7;
@@ -193,22 +451,76 @@ export const uploadExcel = async (req, res) => {
 
     await client.query("COMMIT");
 
-    // Stats for response
-    const skippedCount = prepared.length - toInsert.length;
+    // Generate summary report
+    const summary = {
+      totalRowsInExcel: data.length,
+      validRows: prepared.length,
+      inserted: toInsert.length,
+      skippedDueToValidation: data.length - prepared.length,
+      skippedDueToDBDuplicates: duplicatesInDB.length,
+      batchId: batchId,
+      columnMapping: {
+        name: nameColumn,
+        mobile: mobileColumn,
+        email: emailColumn || 'Not found',
+        address: addressColumn || 'Not found'
+      }
+    };
+
     res.json({
       message: "Excel uploaded successfully",
-      batchId,
-      inserted: toInsert.length,
-      skipped: skippedCount,
+      summary,
+      warnings: duplicatesInDB.length > 0 ? 
+        `${duplicatesInDB.length} records skipped (already in database)` : 
+        undefined
     });
+
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
     console.error("Error uploading excel:", err);
-    res.status(500).json({ message: "Error uploading excel", error: err.message });
+    
+    // More specific error messages
+    let errorMessage = "Error uploading excel";
+    if (err.message.includes("invalid input syntax")) {
+      errorMessage = "Data format error - check for special characters";
+    } else if (err.message.includes("value too long")) {
+      errorMessage = "Data too long for database columns";
+    }
+    
+    res.status(500).json({ 
+      message: errorMessage, 
+      error: err.message 
+    });
   } finally {
     client.release();
   }
 };
+
+// Helper function to validate email
+function isValidEmail(email) {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+// Optional: Add this function to handle different date formats
+function parseDate(dateStr) {
+  if (!dateStr) return null;
+  
+  // Try different date formats
+  const formats = [
+    'DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD',
+    'DD-MM-YYYY', 'MM-DD-YYYY', 'YYYY/MM/DD'
+  ];
+  
+  for (const format of formats) {
+    const parsed = moment(dateStr, format, true);
+    if (parsed.isValid()) {
+      return parsed.toDate();
+    }
+  }
+  
+  return null;
+}
 
 
 

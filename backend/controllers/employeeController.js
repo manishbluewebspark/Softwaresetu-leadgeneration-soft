@@ -412,6 +412,8 @@ export const singleTargertEmployee = async (req, res) => {
 //   }
 // };
 
+
+
 export const assignBatch = async (req, res) => {
   const { distribution, batchId } = req.body;
 
@@ -422,6 +424,10 @@ export const assignBatch = async (req, res) => {
   }
 
   const client = await pool.connect();
+  
+  // Define truncatedCustomers at function scope
+  const truncatedCustomers = [];
+  
   try {
     await client.query("BEGIN");
 
@@ -444,7 +450,12 @@ export const assignBatch = async (req, res) => {
         return res.status(400).json({ message: "Employee not found" });
       }
 
-      const employeeName = employeeResult.rows[0].name;
+      let employeeName = employeeResult.rows[0].name;
+      // Truncate employee name if needed (max 100 chars)
+      if (employeeName && employeeName.length > 100) {
+        console.warn(`Truncating employee name from ${employeeName.length} to 100 chars`);
+        employeeName = employeeName.substring(0, 100);
+      }
 
       // Get unassigned customers from specific batch
       const customersResult = await client.query(
@@ -468,18 +479,40 @@ export const assignBatch = async (req, res) => {
       // Prepare values for bulk insert
       const insertValues = [];
       const placeholders = [];
+      
       customers.forEach((c, i) => {
         const idx = i * 9;
         placeholders.push(
           `($${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4}, $${idx + 5}, $${idx + 6}, $${idx + 7}, $${idx + 8}, $${idx + 9})`
         );
+        
+        // Truncate values to 100 characters if needed
+        let customerName = c.name || '';
+        if (customerName.length > 100) {
+          console.warn(`Truncating customer ${c.id} name from ${customerName.length} to 100 chars: "${customerName}"`);
+          truncatedCustomers.push({ id: c.id, original: customerName });
+          customerName = customerName.substring(0, 100);
+        }
+        
+        let customerAddress = c.address || '';
+        if (customerAddress.length > 100) {
+          console.warn(`Truncating customer ${c.id} address from ${customerAddress.length} to 100 chars`);
+          customerAddress = customerAddress.substring(0, 100);
+        }
+        
+        // Ensure employeeName is also truncated (already done above, but just in case)
+        let safeEmployeeName = employeeName;
+        if (safeEmployeeName && safeEmployeeName.length > 100) {
+          safeEmployeeName = safeEmployeeName.substring(0, 100);
+        }
+        
         insertValues.push(
           c.id,
-          c.name,
-          c.mobile,
-          c.address,
+          customerName,
+          c.mobile || '',
+          customerAddress,
           employeeId,
-          employeeName,
+          safeEmployeeName,
           "Pending",
           5,
           batchId
@@ -503,12 +536,42 @@ export const assignBatch = async (req, res) => {
       }
     }
 
+    // Log if any names were truncated
+    if (truncatedCustomers.length > 0) {
+      console.log(`Truncated ${truncatedCustomers.length} customer names that exceeded 100 characters`);
+    }
+
     await client.query("COMMIT");
-    res.json({ message: "Customers assigned successfully" });
+    
+    // Prepare response
+    const response = { 
+      message: "Customers assigned successfully"
+    };
+    
+    // Add note only if there were truncations
+    if (truncatedCustomers.length > 0) {
+      response.note = `Note: ${truncatedCustomers.length} customer names were truncated to fit 100 character limit`;
+    }
+    
+    res.json(response);
+    
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("Assign error:", err);
-    res.status(500).json({ message: "Server error" });
+    
+    // More detailed error logging
+    if (err.code === '22001') {
+      console.error("Database error: Value too long for VARCHAR(100) column");
+      console.error("Check the 'assining_customers' table column sizes:");
+      console.error("- name VARCHAR(100)");
+      console.error("- address VARCHAR(100)"); 
+      console.error("- employee_name VARCHAR(100)");
+    }
+    
+    res.status(500).json({ 
+      message: "Server error",
+      error: err.code === '22001' ? "Data too long for database column" : undefined
+    });
   } finally {
     client.release();
   }

@@ -599,11 +599,11 @@ export default function Excel() {
                           className="cursor-pointer text-gray-600"
                           onClick={() => navigate(`/excel/batch/${params.data.batch_id}`)}
                         />
-                        {/* <Trash
+                        <Trash
                           size={18}
                           className="cursor-pointer text-gray-600"
                           onClick={() => handleDelete(params.data.batch_id)}
-                        /> */}
+                        />
                       </div>
                     </div>
                   ),
