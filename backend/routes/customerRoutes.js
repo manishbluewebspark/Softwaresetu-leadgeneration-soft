@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { getCustomers, uploadExcel, getBatches, getCustomersByBatch, getAssignedCustomers, changeStatus, leadData, dashboardBoxData, getLeadHistoryByCustomerId, getName, addBankDetails, getBankDetails, earning, getStatusByDataForEmployee, getDailyDemos, getStatusByDataForEmployeeCurrentDate, earningData, batchDelete, dashboardBoxDataUser, getLeadHistory, getStatusByDataForSourceDaily, getStatusByDataForEmployeeCurrentDateNew, getDailyDemoUser , getMonthlyDeals, getMonthlyDealDetails } from "../controllers/customerController.js";
+import { getCustomers,getAllDuplicateLogs , getDuplicateCount , getDuplicateLogs ,uploadExcel, getBatches, getCustomersByBatch, getAssignedCustomers, changeStatus, leadData, dashboardBoxData, getLeadHistoryByCustomerId, getName, addBankDetails, getBankDetails, earning, getStatusByDataForEmployee, getDailyDemos, getStatusByDataForEmployeeCurrentDate, earningData, batchDelete, dashboardBoxDataUser, getLeadHistory, getStatusByDataForSourceDaily, getStatusByDataForEmployeeCurrentDateNew, getDailyDemoUser , getMonthlyDeals, getMonthlyDealDetails } from "../controllers/customerController.js";
 
 
 const router = Router();
@@ -10,6 +10,12 @@ const upload = multer({ storage: multer.memoryStorage() });
 router.post("/add-bank", addBankDetails);
 
 router.post("/upload", upload.single("file"), uploadExcel);
+
+router.get('/duplicate-logs/:batchId', getDuplicateLogs);
+
+router.get('/duplicate-logs', getAllDuplicateLogs);
+
+router.get('/duplicate-count/:batchId', getDuplicateCount);
 
 router.get("/get-data", getCustomers);
 

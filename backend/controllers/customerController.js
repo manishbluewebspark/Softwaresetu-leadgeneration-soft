@@ -1,71 +1,6 @@
 import { read, utils } from "xlsx";
 import { pool } from "../config/db.js";
 
-// export const uploadExcel = async (req, res) => {
-//   try {
-//     if (!req.file) {
-//       return res.status(400).json({ message: "No file uploaded" });
-//     }
-//     if (!req.body.source_name) {
-//       return res.status(400).json({ message: "Source name is required" });
-//     }
-
-//     // Read Excel file
-//     const workbook = read(req.file.buffer, { type: "buffer" });
-//     const sheetName = workbook.SheetNames[0];
-//     const sheet = workbook.Sheets[sheetName];
-//     let data = utils.sheet_to_json(sheet, { defval: "" });
-
-//     // Normalize keys
-//     data = data.map((row) => {
-//       const normalized = {};
-//       for (let key in row) {
-//         const newKey = key.toString().trim().toLowerCase();
-//         normalized[newKey] = row[key];
-//       }
-//       return normalized;
-//     });
-
-//     // Insert into batches and return ID
-// const batchResult = await pool.query(
-//   "INSERT INTO batches (source_name) VALUES ($1) RETURNING batch_id",
-//   [req.body.source_name]
-// );
-// const batchId = batchResult.rows[0].batch_id;
-
-
-//     // Prepare customer values
-//     const values = data.map((row) => [
-//       batchId,
-//       row.name || row["full name"] || "",
-//       row.email || row["e-mail"] || "",
-//       row.mobile || row.phone || "",
-//       row.address || "",
-//       "pending",
-//     ]);
-
-//     // Generate placeholders for bulk insert
-//     const placeholders = values
-//       .map(
-//         (_, i) =>
-//           `($${i * 6 + 1}, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6})`
-//       )
-//       .join(", ");
-
-//     // Flatten values for query
-//     const flatValues = values.flat();
-
-//     await pool.query(
-//       `INSERT INTO customers (batch_id, name, email, mobile, address, status) VALUES ${placeholders}`,
-//       flatValues
-//     );
-
-//     res.json({ message: "Excel uploaded successfully", batchId });
-//   } catch (err) {
-//     console.error("Error uploading excel:", err);
-//     res.status(500).json({ message: "Error uploading excel" });
-//   }
-// };
 
 
 // export const uploadExcel = async (req, res) => {
@@ -211,6 +146,298 @@ import { pool } from "../config/db.js";
 // };
 
 
+// export const uploadExcel = async (req, res) => {
+//   const client = await pool.connect();
+//   try {
+//     if (!req.file) {
+//       return res.status(400).json({ message: "No file uploaded" });
+//     }
+//     if (!req.body.source_name) {
+//       return res.status(400).json({ message: "Source name is required" });
+//     }
+
+//     // Read Excel file
+//     const workbook = read(req.file.buffer, { type: "buffer" });
+//     const sheetName = workbook.SheetNames[0];
+//     const sheet = workbook.Sheets[sheetName];
+//     let data = utils.sheet_to_json(sheet, { defval: "", raw: false });
+
+//     // Normalize keys to lowercase and trim
+//     data = data.map((row) => {
+//       const normalized = {};
+//       for (let key in row) {
+//         const newKey = key.toString().trim().toLowerCase()
+//           .replace(/[^\w\s]/gi, '') // Remove special characters
+//           .replace(/\s+/g, '_'); // Replace spaces with underscores
+//         normalized[newKey] = row[key];
+//       }
+//       return normalized;
+//     });
+
+//     // Start transaction
+//     await client.query("BEGIN");
+
+//     // Insert into batches and get batch ID
+//     const batchResult = await client.query(
+//       "INSERT INTO batches (source_name, description) VALUES ($1, $2) RETURNING batch_id",
+//       [req.body.source_name, req.body.description || ""]
+//     );
+
+//     if (batchResult.rows.length === 0) {
+//       throw new Error("Failed to insert batch");
+//     }
+//     const batchId = batchResult.rows[0].batch_id;
+
+//     // Define expected column mappings with priority
+//     const columnMappings = {
+//       name: ['name', 'full_name', 'fullname', 'customer_name', 'client_name', 'contact_person'],
+//       mobile: ['mobile', 'phone', 'contact', 'phone_number', 'contact_number', 'mobileno'],
+//       email: ['email', 'e_mail', 'mail', 'email_id'],
+//       address: ['address', 'location', 'city', 'area', 'street', 'full_address']
+//     };
+
+//     // Find actual column names in the data
+//     const findColumn = (possibleNames) => {
+//       for (const name of possibleNames) {
+//         if (data[0] && data[0][name] !== undefined) {
+//           return name;
+//         }
+//       }
+//       return null;
+//     };
+
+//     const nameColumn = findColumn(columnMappings.name);
+//     const mobileColumn = findColumn(columnMappings.mobile);
+//     const emailColumn = findColumn(columnMappings.email);
+//     const addressColumn = findColumn(columnMappings.address);
+
+//     // Validate required columns
+//     if (!nameColumn) {
+//       await client.query("ROLLBACK");
+//       return res.status(400).json({ 
+//         message: "Excel must contain a 'Name' column", 
+//         availableColumns: Object.keys(data[0] || {}) 
+//       });
+//     }
+
+//     if (!mobileColumn) {
+//       await client.query("ROLLBACK");
+//       return res.status(400).json({ 
+//         message: "Excel must contain a 'Mobile' or 'Phone' column",
+//         availableColumns: Object.keys(data[0] || {}) 
+//       });
+//     }
+
+//     // Prepare and validate customer data
+//     const prepared = [];
+//     const errors = [];
+//     const duplicatesInFile = new Set();
+//     const mobileSet = new Set();
+
+//     data.forEach((row, index) => {
+//       const rowNum = index + 2; // Excel rows are 1-indexed, header is row 1
+      
+//       // Extract values with fallbacks
+//       let name = (row[nameColumn] || '').toString().trim();
+//       let email = emailColumn ? (row[emailColumn] || '').toString().trim().toLowerCase() : '';
+//       let mobile = (row[mobileColumn] || '').toString().trim();
+//       let address = addressColumn ? (row[addressColumn] || '').toString().trim() : '';
+
+//       // Clean mobile number - keep only digits, remove country code if it's 91
+//       if (mobile) {
+//         mobile = mobile.replace(/\D/g, ''); // Remove non-digits
+//         // Remove leading 91 (India code) if number is 12 digits starting with 91
+//         if (mobile.length === 12 && mobile.startsWith('91')) {
+//           mobile = mobile.substring(2);
+//         }
+//         // Remove leading 0 if present
+//         if (mobile.startsWith('0')) {
+//           mobile = mobile.substring(1);
+//         }
+//       }
+
+//       // Validation rules
+//       if (!name || name.length === 0) {
+//         errors.push(`Row ${rowNum}: Name is required`);
+//         return;
+//       }
+
+//       if (!mobile || mobile.length === 0) {
+//         errors.push(`Row ${rowNum}: Mobile number is required`);
+//         return;
+//       }
+
+//       if (mobile.length < 10 || mobile.length > 15) {
+//         errors.push(`Row ${rowNum}: Mobile number must be 10-15 digits (got ${mobile.length})`);
+//         return;
+//       }
+
+//       // Check for duplicate mobile within same file
+//       if (mobileSet.has(mobile)) {
+//         duplicatesInFile.add(mobile);
+//         errors.push(`Row ${rowNum}: Duplicate mobile number in file: ${mobile}`);
+//         return;
+//       }
+//       mobileSet.add(mobile);
+
+//       // Validate email format if provided
+//       if (email && !isValidEmail(email)) {
+//         errors.push(`Row ${rowNum}: Invalid email format: ${email}`);
+//         return;
+//       }
+
+//       // Truncate long values to match database constraints
+//       if (name.length > 100) {
+//         name = name.substring(0, 100);
+//       }
+//       if (address.length > 255) {
+//         address = address.substring(0, 255);
+//       }
+//       if (email.length > 100) {
+//         email = email.substring(0, 100);
+//       }
+
+//       prepared.push({
+//         batchId,
+//         name,
+//         email,
+//         mobile,
+//         address,
+//         status: "Pending",
+//         status_id: 5
+//       });
+//     });
+
+//     // If validation errors, rollback and return errors
+//     if (errors.length > 0) {
+//       await client.query("ROLLBACK");
+//       return res.status(400).json({
+//         message: "Validation failed",
+//         errors: errors.slice(0, 20), // Return first 20 errors only
+//         totalErrors: errors.length,
+//         duplicatesInFile: Array.from(duplicatesInFile)
+//       });
+//     }
+
+//     if (prepared.length === 0) {
+//       await client.query("ROLLBACK");
+//       return res.status(400).json({ 
+//         message: "No valid data to import after validation" 
+//       });
+//     }
+
+//     // Check for duplicates in database
+//     const mobilesToCheck = prepared.map(p => p.mobile);
+//     let existingMobileSet = new Set();
+    
+//     if (mobilesToCheck.length > 0) {
+//       const existingRes = await client.query(
+//         "SELECT mobile FROM customers WHERE mobile = ANY($1::text[])",
+//         [mobilesToCheck]
+//       );
+//       existingRes.rows.forEach((r) => {
+//         if (r.mobile) existingMobileSet.add(r.mobile.toString());
+//       });
+//     }
+
+//     // Separate new and duplicate records
+//     const toInsert = [];
+//     const duplicatesInDB = [];
+    
+//     prepared.forEach((customer) => {
+//       if (existingMobileSet.has(customer.mobile)) {
+//         duplicatesInDB.push(customer.mobile);
+//       } else {
+//         toInsert.push(customer);
+//       }
+//     });
+
+//     if (toInsert.length === 0) {
+//       await client.query("ROLLBACK");
+//       return res.status(400).json({
+//         message: "All mobile numbers already exist in database",
+//         duplicates: duplicatesInDB.slice(0, 10), // Show first 10 duplicates
+//         totalDuplicates: duplicatesInDB.length
+//       });
+//     }
+
+//     // Insert valid records
+//     const placeholders = toInsert
+//       .map((_, i) => {
+//         const base = i * 7;
+//         return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7})`;
+//       })
+//       .join(", ");
+
+//     const flatValues = toInsert.flatMap((p) => [
+//       p.batchId,
+//       p.name,
+//       p.email,
+//       p.mobile,
+//       p.address,
+//       p.status,
+//       p.status_id,
+//     ]);
+
+//     await client.query(
+//       `INSERT INTO customers (batch_id, name, email, mobile, address, status, status_id) VALUES ${placeholders}`,
+//       flatValues
+//     );
+
+//     await client.query("COMMIT");
+
+//     // Generate summary report
+//     const summary = {
+//       totalRowsInExcel: data.length,
+//       validRows: prepared.length,
+//       inserted: toInsert.length,
+//       skippedDueToValidation: data.length - prepared.length,
+//       skippedDueToDBDuplicates: duplicatesInDB.length,
+//       batchId: batchId,
+//       columnMapping: {
+//         name: nameColumn,
+//         mobile: mobileColumn,
+//         email: emailColumn || 'Not found',
+//         address: addressColumn || 'Not found'
+//       }
+//     };
+
+//     res.json({
+//       message: "Excel uploaded successfully",
+//       summary,
+//       warnings: duplicatesInDB.length > 0 ? 
+//         `${duplicatesInDB.length} records skipped (already in database)` : 
+//         undefined
+//     });
+
+//   } catch (err) {
+//     await client.query("ROLLBACK").catch(() => {});
+//     console.error("Error uploading excel:", err);
+    
+//     // More specific error messages
+//     let errorMessage = "Error uploading excel";
+//     if (err.message.includes("invalid input syntax")) {
+//       errorMessage = "Data format error - check for special characters";
+//     } else if (err.message.includes("value too long")) {
+//       errorMessage = "Data too long for database columns";
+//     }
+    
+//     res.status(500).json({ 
+//       message: errorMessage, 
+//       error: err.message 
+//     });
+//   } finally {
+//     client.release();
+//   }
+// };
+
+
+
+
+
+
+
+
 export const uploadExcel = async (req, res) => {
   const client = await pool.connect();
   try {
@@ -232,8 +459,8 @@ export const uploadExcel = async (req, res) => {
       const normalized = {};
       for (let key in row) {
         const newKey = key.toString().trim().toLowerCase()
-          .replace(/[^\w\s]/gi, '') // Remove special characters
-          .replace(/\s+/g, '_'); // Replace spaces with underscores
+          .replace(/[^\w\s]/gi, '')
+          .replace(/\s+/g, '_');
         normalized[newKey] = row[key];
       }
       return normalized;
@@ -295,12 +522,13 @@ export const uploadExcel = async (req, res) => {
 
     // Prepare and validate customer data
     const prepared = [];
-    const errors = [];
-    const duplicatesInFile = new Set();
+    const validationErrors = [];
+    const inFileDuplicates = []; // Store in-file duplicate details
     const mobileSet = new Set();
+    const mobileToRowMap = new Map(); // Track mobile to row data mapping
 
     data.forEach((row, index) => {
-      const rowNum = index + 2; // Excel rows are 1-indexed, header is row 1
+      const rowNum = index + 2;
       
       // Extract values with fallbacks
       let name = (row[nameColumn] || '').toString().trim();
@@ -308,14 +536,12 @@ export const uploadExcel = async (req, res) => {
       let mobile = (row[mobileColumn] || '').toString().trim();
       let address = addressColumn ? (row[addressColumn] || '').toString().trim() : '';
 
-      // Clean mobile number - keep only digits, remove country code if it's 91
+      // Clean mobile number
       if (mobile) {
-        mobile = mobile.replace(/\D/g, ''); // Remove non-digits
-        // Remove leading 91 (India code) if number is 12 digits starting with 91
+        mobile = mobile.replace(/\D/g, '');
         if (mobile.length === 12 && mobile.startsWith('91')) {
           mobile = mobile.substring(2);
         }
-        // Remove leading 0 if present
         if (mobile.startsWith('0')) {
           mobile = mobile.substring(1);
         }
@@ -323,44 +549,48 @@ export const uploadExcel = async (req, res) => {
 
       // Validation rules
       if (!name || name.length === 0) {
-        errors.push(`Row ${rowNum}: Name is required`);
+        validationErrors.push(`Row ${rowNum}: Name is required`);
         return;
       }
 
       if (!mobile || mobile.length === 0) {
-        errors.push(`Row ${rowNum}: Mobile number is required`);
+        validationErrors.push(`Row ${rowNum}: Mobile number is required`);
         return;
       }
 
       if (mobile.length < 10 || mobile.length > 15) {
-        errors.push(`Row ${rowNum}: Mobile number must be 10-15 digits (got ${mobile.length})`);
+        validationErrors.push(`Row ${rowNum}: Mobile number must be 10-15 digits (got ${mobile.length})`);
         return;
       }
 
       // Check for duplicate mobile within same file
       if (mobileSet.has(mobile)) {
-        duplicatesInFile.add(mobile);
-        errors.push(`Row ${rowNum}: Duplicate mobile number in file: ${mobile}`);
-        return;
+        // This is a duplicate within the file
+        inFileDuplicates.push({
+          rowNum,
+          name,
+          mobile,
+          email,
+          address,
+          batchId,
+          sourceName: req.body.source_name,
+          duplicateType: 'in_file'
+        });
+        return; // Skip this row
       }
       mobileSet.add(mobile);
+      mobileToRowMap.set(mobile, { name, email, address, rowNum });
 
       // Validate email format if provided
       if (email && !isValidEmail(email)) {
-        errors.push(`Row ${rowNum}: Invalid email format: ${email}`);
+        validationErrors.push(`Row ${rowNum}: Invalid email format: ${email}`);
         return;
       }
 
-      // Truncate long values to match database constraints
-      if (name.length > 100) {
-        name = name.substring(0, 100);
-      }
-      if (address.length > 255) {
-        address = address.substring(0, 255);
-      }
-      if (email.length > 100) {
-        email = email.substring(0, 100);
-      }
+      // Truncate long values
+      if (name.length > 100) name = name.substring(0, 100);
+      if (address.length > 255) address = address.substring(0, 255);
+      if (email.length > 100) email = email.substring(0, 100);
 
       prepared.push({
         batchId,
@@ -373,113 +603,184 @@ export const uploadExcel = async (req, res) => {
       });
     });
 
-    // If validation errors, rollback and return errors
-    if (errors.length > 0) {
+    // If only validation errors (not duplicates), rollback
+    if (validationErrors.length > 0) {
       await client.query("ROLLBACK");
       return res.status(400).json({
         message: "Validation failed",
-        errors: errors.slice(0, 20), // Return first 20 errors only
-        totalErrors: errors.length,
-        duplicatesInFile: Array.from(duplicatesInFile)
+        errors: validationErrors.slice(0, 20),
+        totalErrors: validationErrors.length
       });
     }
 
-    if (prepared.length === 0) {
+    if (prepared.length === 0 && inFileDuplicates.length === 0) {
       await client.query("ROLLBACK");
       return res.status(400).json({ 
-        message: "No valid data to import after validation" 
+        message: "No valid data to import" 
       });
     }
 
     // Check for duplicates in database
     const mobilesToCheck = prepared.map(p => p.mobile);
-    let existingMobileSet = new Set();
+    const dbDuplicates = [];
     
     if (mobilesToCheck.length > 0) {
       const existingRes = await client.query(
-        "SELECT mobile FROM customers WHERE mobile = ANY($1::text[])",
+        `SELECT c.mobile, c.name, c.email, c.address, b.batch_id, b.source_name 
+         FROM customers c 
+         JOIN batches b ON c.batch_id = b.batch_id 
+         WHERE c.mobile = ANY($1::text[])`,
         [mobilesToCheck]
       );
-      existingRes.rows.forEach((r) => {
-        if (r.mobile) existingMobileSet.add(r.mobile.toString());
+      
+      const existingMobileMap = new Map();
+      existingRes.rows.forEach((row) => {
+        existingMobileMap.set(row.mobile.toString(), row);
       });
-    }
 
-    // Separate new and duplicate records
-    const toInsert = [];
-    const duplicatesInDB = [];
-    
-    prepared.forEach((customer) => {
-      if (existingMobileSet.has(customer.mobile)) {
-        duplicatesInDB.push(customer.mobile);
-      } else {
-        toInsert.push(customer);
+      // Separate new and duplicate records
+      const toInsert = [];
+      prepared.forEach((customer) => {
+        if (existingMobileMap.has(customer.mobile)) {
+          const existing = existingMobileMap.get(customer.mobile);
+          dbDuplicates.push({
+            rowNum: mobileToRowMap.get(customer.mobile)?.rowNum,
+            name: customer.name,
+            mobile: customer.mobile,
+            email: customer.email,
+            address: customer.address,
+            batchId,
+            sourceName: req.body.source_name,
+            existingBatchId: existing.batch_id,
+            existingSourceName: existing.source_name,
+            duplicateType: 'in_database'
+          });
+        } else {
+          toInsert.push(customer);
+        }
+      });
+
+      // Insert in-file duplicates to logs
+      if (inFileDuplicates.length > 0) {
+        const inFileLogs = inFileDuplicates.map(dup => [
+          batchId,
+          dup.sourceName,
+          dup.name,
+          dup.mobile,
+          dup.email || '',
+          dup.address || '',
+          null, // existing_batch_id
+          null, // existing_source_name
+          'in_file'
+        ]);
+
+        await client.query(
+          `INSERT INTO duplicate_logs 
+           (batch_id, source_name, customer_name, mobile, email, address, 
+            existing_batch_id, existing_source_name, duplicate_type) 
+           VALUES ${inFileDuplicates.map((_, i) => 
+             `($${i*9 + 1}, $${i*9 + 2}, $${i*9 + 3}, $${i*9 + 4}, $${i*9 + 5}, 
+               $${i*9 + 6}, $${i*9 + 7}, $${i*9 + 8}, $${i*9 + 9})`
+           ).join(', ')}`,
+          inFileLogs.flat()
+        );
       }
-    });
 
-    if (toInsert.length === 0) {
+      // Insert database duplicates to logs
+      if (dbDuplicates.length > 0) {
+        const dbLogs = dbDuplicates.map(dup => [
+          batchId,
+          dup.sourceName,
+          dup.name,
+          dup.mobile,
+          dup.email || '',
+          dup.address || '',
+          dup.existingBatchId,
+          dup.existingSourceName,
+          'in_database'
+        ]);
+
+        await client.query(
+          `INSERT INTO duplicate_logs 
+           (batch_id, source_name, customer_name, mobile, email, address, 
+            existing_batch_id, existing_source_name, duplicate_type) 
+           VALUES ${dbDuplicates.map((_, i) => 
+             `($${i*9 + 1}, $${i*9 + 2}, $${i*9 + 3}, $${i*9 + 4}, $${i*9 + 5}, 
+               $${i*9 + 6}, $${i*9 + 7}, $${i*9 + 8}, $${i*9 + 9})`
+           ).join(', ')}`,
+          dbLogs.flat()
+        );
+      }
+
+      // Insert only unique records
+      if (toInsert.length > 0) {
+        const placeholders = toInsert
+          .map((_, i) => {
+            const base = i * 7;
+            return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7})`;
+          })
+          .join(", ");
+
+        const flatValues = toInsert.flatMap((p) => [
+          p.batchId,
+          p.name,
+          p.email,
+          p.mobile,
+          p.address,
+          p.status,
+          p.status_id,
+        ]);
+
+        await client.query(
+          `INSERT INTO customers (batch_id, name, email, mobile, address, status, status_id) 
+           VALUES ${placeholders}`,
+          flatValues
+        );
+      }
+
+      await client.query("COMMIT");
+
+      // Generate summary report
+      const summary = {
+        totalRowsInExcel: data.length,
+        inserted: toInsert.length,
+        skippedInFileDuplicates: inFileDuplicates.length,
+        skippedDbDuplicates: dbDuplicates.length,
+        skippedValidationErrors: validationErrors.length,
+        batchId: batchId,
+        columnMapping: {
+          name: nameColumn,
+          mobile: mobileColumn,
+          email: emailColumn || 'Not found',
+          address: addressColumn || 'Not found'
+        }
+      };
+
+      res.json({
+        message: "Excel uploaded successfully",
+        summary,
+        warnings: []
+      });
+
+    } else {
       await client.query("ROLLBACK");
-      return res.status(400).json({
-        message: "All mobile numbers already exist in database",
-        duplicates: duplicatesInDB.slice(0, 10), // Show first 10 duplicates
-        totalDuplicates: duplicatesInDB.length
+      res.json({
+        message: "No new records to insert (all were duplicates)",
+        summary: {
+          totalRowsInExcel: data.length,
+          inserted: 0,
+          skippedInFileDuplicates: inFileDuplicates.length,
+          skippedDbDuplicates: 0,
+          skippedValidationErrors: 0,
+          batchId: null
+        }
       });
     }
-
-    // Insert valid records
-    const placeholders = toInsert
-      .map((_, i) => {
-        const base = i * 7;
-        return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7})`;
-      })
-      .join(", ");
-
-    const flatValues = toInsert.flatMap((p) => [
-      p.batchId,
-      p.name,
-      p.email,
-      p.mobile,
-      p.address,
-      p.status,
-      p.status_id,
-    ]);
-
-    await client.query(
-      `INSERT INTO customers (batch_id, name, email, mobile, address, status, status_id) VALUES ${placeholders}`,
-      flatValues
-    );
-
-    await client.query("COMMIT");
-
-    // Generate summary report
-    const summary = {
-      totalRowsInExcel: data.length,
-      validRows: prepared.length,
-      inserted: toInsert.length,
-      skippedDueToValidation: data.length - prepared.length,
-      skippedDueToDBDuplicates: duplicatesInDB.length,
-      batchId: batchId,
-      columnMapping: {
-        name: nameColumn,
-        mobile: mobileColumn,
-        email: emailColumn || 'Not found',
-        address: addressColumn || 'Not found'
-      }
-    };
-
-    res.json({
-      message: "Excel uploaded successfully",
-      summary,
-      warnings: duplicatesInDB.length > 0 ? 
-        `${duplicatesInDB.length} records skipped (already in database)` : 
-        undefined
-    });
 
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
     console.error("Error uploading excel:", err);
     
-    // More specific error messages
     let errorMessage = "Error uploading excel";
     if (err.message.includes("invalid input syntax")) {
       errorMessage = "Data format error - check for special characters";
@@ -495,6 +796,138 @@ export const uploadExcel = async (req, res) => {
     client.release();
   }
 };
+
+
+
+
+
+
+// Get duplicate logs for a batch
+export const getDuplicateLogs = async (req, res) => {
+  const { batchId } = req.params;
+  
+  try {
+    const result = await pool.query(
+      `SELECT 
+         log_id,
+         batch_id,
+         source_name,
+         customer_name,
+         mobile,
+         email,
+         address,
+         existing_batch_id,
+         existing_source_name,
+         duplicate_type,
+         created_at
+       FROM duplicate_logs 
+       WHERE batch_id = $1 
+       ORDER BY created_at DESC`,
+      [batchId]
+    );
+    
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Error fetching duplicate logs:", err);
+    res.status(500).json({ message: "Error fetching duplicate logs" });
+  }
+};
+
+
+// Get all duplicate logs with pagination
+export const getAllDuplicateLogs = async (req, res) => {
+  const { page = 1, limit = 50, search = '', type = '' } = req.query;
+  const offset = (page - 1) * limit;
+  
+  try {
+    let query = `
+      SELECT 
+        log_id,
+        batch_id,
+        source_name,
+        customer_name,
+        mobile,
+        email,
+        address,
+        existing_batch_id,
+        existing_source_name,
+        duplicate_type,
+        created_at
+      FROM duplicate_logs 
+      WHERE 1=1
+    `;
+    
+    const params = [];
+    let paramCount = 1;
+    
+    if (search) {
+      query += ` AND (customer_name ILIKE $${paramCount} OR mobile ILIKE $${paramCount} OR source_name ILIKE $${paramCount})`;
+      params.push(`%${search}%`);
+      paramCount++;
+    }
+    
+    if (type) {
+      query += ` AND duplicate_type = $${paramCount}`;
+      params.push(type);
+      paramCount++;
+    }
+    
+    query += ` ORDER BY created_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
+    params.push(limit, offset);
+    
+    // Get total count
+    const countQuery = `
+      SELECT COUNT(*) as total 
+      FROM duplicate_logs 
+      WHERE 1=1 
+      ${search ? `AND (customer_name ILIKE '%${search}%' OR mobile ILIKE '%${search}%' OR source_name ILIKE '%${search}%')` : ''}
+      ${type ? `AND duplicate_type = '${type}'` : ''}
+    `;
+    
+    const [result, countResult] = await Promise.all([
+      pool.query(query, params),
+      pool.query(countQuery)
+    ]);
+    
+    res.json({
+      logs: result.rows,
+      total: parseInt(countResult.rows[0].total),
+      page: parseInt(page),
+      totalPages: Math.ceil(countResult.rows[0].total / limit)
+    });
+  } catch (err) {
+    console.error("Error fetching all duplicate logs:", err);
+    res.status(500).json({ message: "Error fetching duplicate logs" });
+  }
+};
+
+
+
+
+export const getDuplicateCount = async (req, res) => {
+  const { batchId } = req.params;
+  
+  try {
+    const result = await pool.query(
+      `SELECT COUNT(*) as count 
+       FROM duplicate_logs 
+       WHERE batch_id = $1`,
+      [batchId]
+    );
+    
+    res.json({
+      count: parseInt(result.rows[0].count)
+    });
+  } catch (err) {
+    console.error("Error fetching duplicate count:", err);
+    res.status(500).json({ 
+      message: "Error fetching duplicate count",
+      count: 0
+    });
+  }
+};
+
+
 
 // Helper function to validate email
 function isValidEmail(email) {
