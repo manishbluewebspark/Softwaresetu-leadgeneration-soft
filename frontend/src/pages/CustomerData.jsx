@@ -36,7 +36,7 @@ export default function CustomerData() {
   const [noteModalData, setNoteModalData] = useState(null);
   const [quickFilterText, setQuickFilterText] = useState("");
   const [data, setData] = useState([]);
-  console.log(data,100000)
+  console.log(data, 100000)
   const [copyData, setCopyData] = useState([]);
   const [copyChekingData, setChekingCopyData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -55,9 +55,10 @@ export default function CustomerData() {
   const [selectedBatch, setSelectedBatch] = useState(null);
   const [limit, setLimit] = useState("");
   const [employees, setEmployees] = useState([]);
-  
+
   const [selectedEmployees, setSelectedEmployees] = useState([]);
   const [statusData, setStatusData] = useState([]);
+  
   const [statusFullData, setStatusFullData] = useState([]);
   const [openModalData, setOpenModalData] = useState(null);
   const [dateTimeMap, setDateTimeMap] = useState({});
@@ -81,15 +82,26 @@ export default function CustomerData() {
   const [selectedSource, setSelectedSource] = useState("0");
 
 
-useEffect(() => {
-  const handleClickOutside = (e) => {
-    if (!gridRef.current?.eGridDiv.contains(e.target)) {
-      setSelectedRowId(null);
-    }
-  };
-  document.addEventListener("click", handleClickOutside);
-  return () => document.removeEventListener("click", handleClickOutside);
-}, []);
+  // ------------------------------------------clear data ----------------
+
+
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [clearModalSource, setClearModalSource] = useState("");
+  const [clearModalCurrentStatus, setClearModalCurrentStatus] = useState("");
+  const [clearModalSetStatus, setClearModalSetStatus] = useState("");
+
+  // ------------------------------------------clear data ----------------
+
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!gridRef.current?.eGridDiv.contains(e.target)) {
+        setSelectedRowId(null);
+      }
+    };
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, []);
 
 
   const CustomDateInput = forwardRef(({ value, onClick }, ref) => (
@@ -228,27 +240,27 @@ useEffect(() => {
       },
       // { headerName: "Mobile", field: "mobile", },
       {
-  headerName: "Mobile",
-  field: "mobile",
-  cellRenderer: (params) => (
-    <div
-      className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-1 rounded"
-      onClick={(e) => {
-        e.stopPropagation(); // row select event se bachne ke liye
-        setStatusModalData({
-          customer_id: params.data.id,
-          currentStatus: params.value,
-          newStatus: params.value,
-          batch_id: params.data.batch_id,
-        });
-      }}
-      title="Edit Status"
-    >
-      <span>{params.value}</span>
-    </div>
-  ),
-},
-  { headerName: "Source", field: "source_name" },
+        headerName: "Mobile",
+        field: "mobile",
+        cellRenderer: (params) => (
+          <div
+            className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-1 rounded"
+            onClick={(e) => {
+              e.stopPropagation(); // row select event se bachne ke liye
+              setStatusModalData({
+                customer_id: params.data.id,
+                currentStatus: params.value,
+                newStatus: params.value,
+                batch_id: params.data.batch_id,
+              });
+            }}
+            title="Edit Status"
+          >
+            <span>{params.value}</span>
+          </div>
+        ),
+      },
+      { headerName: "Source", field: "source_name" },
       { headerName: "Status", field: "status" },
       {
         headerName: "Comment",
@@ -600,6 +612,143 @@ useEffect(() => {
   return (
 
     <RoleGuard role="admin">
+
+      {/* ------------------------------------------------------------------------------------ clear model ------------ */}
+
+      {/* Clear Status Modal */}
+      {showClearModal && (
+        <div className="fixed inset-0 flex items-center justify-center backdrop-blur-sm bg-opacity-40 z-50">
+          <div className="bg-white p-6 rounded-xl shadow-lg w-[500px]">
+            <h3 className="text-lg font-bold mb-6 text-center">Clear Customer Status</h3>
+
+            <div className="space-y-4 mb-6">
+              {/* Source Dropdown */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Select Source
+                </label>
+                <select
+                  value={clearModalSource}
+                  onChange={(e) => setClearModalSource(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="0">All Sources</option>
+                  {sources.map((source) => (
+                    <option key={source.batch_id} value={source.batch_id}>
+                      {source.source_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Current Status Dropdown */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Current Status
+                </label>
+                <select
+                  value={clearModalCurrentStatus}
+                  onChange={(e) => setClearModalCurrentStatus(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="0">All Statuses</option>
+                  {statusFullData.map((status, index) => (
+                    <option key={index} value={status.id}>
+                      {status.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Set Status Dropdown */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Set Status To
+                </label>
+                <select
+                  value={clearModalSetStatus}
+                  onChange={(e) => setClearModalSetStatus(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Select Status</option>
+                  {statusFullData.map((status, index) => (
+                    <option key={index} value={status.id}>
+                      {status.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button
+                className="px-4 py-2 bg-gray-400 text-white rounded-md hover:bg-gray-500"
+                onClick={() => {
+                  setShowClearModal(false);
+                  setClearModalSource("");
+                  setClearModalCurrentStatus("");
+                  setClearModalSetStatus("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 disabled:bg-red-300 disabled:cursor-not-allowed"
+                disabled={!clearModalSetStatus}
+                onClick={async () => {
+                  if (!clearModalSetStatus) {
+                    toast.warning("Please select a status to set!");
+                    return;
+                  }
+
+                  try {
+                    // API call यहाँ जोड़ें
+                    const token = localStorage.getItem("token");
+                    const response = await axios.post(
+                      `${apiUrl}/customers/clear-status`,
+                      {
+                        source: clearModalSource === "0" ? null : clearModalSource,
+                        currentStatus: clearModalCurrentStatus === "0" ? null : clearModalCurrentStatus,
+                        setStatus: clearModalSetStatus
+                      },
+                      {
+                        headers: {
+                          Authorization: `Bearer ${token}`,
+                        },
+                      }
+                    );
+
+                    if (response.status === 200) {
+                      toast.success("Status cleared successfully!");
+
+                      // Data refresh करें
+                      await fetchCustomers();
+
+                      // Modal बंद करें
+                      setShowClearModal(false);
+                      setClearModalSource("");
+                      setClearModalCurrentStatus("");
+                      setClearModalSetStatus("");
+                    }
+                  } catch (error) {
+                    console.error("Error clearing status:", error);
+                    toast.error("Failed to clear status!");
+                  }
+                }}
+              >
+                Submit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {/* ------------------------------------------------------------------------------------ clear model ------------ */}
+
+
+
       <div className="p-6 bg-white rounded-xl shadow-md">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <h2 className="text-2xl font-bold">Customer Data</h2>
@@ -621,6 +770,14 @@ useEffect(() => {
               value={quickFilterText}
               onChange={setQuickFilterText}
             />
+
+
+            <button
+              onClick={() => setShowClearModal(true)}
+              className="w-[130px] px-3 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 text-sm"
+            >
+              Clear Status
+            </button>
 
 
             <button
@@ -666,34 +823,34 @@ useEffect(() => {
 
         <div className="ag-theme-alpine" style={{ height: 718, width: "100%" }}>
           <AgGridReact
-  theme={themeBalham}
-  ref={gridRef}
-  rowData={
-    selectedStatus == 0
-      ? data
-      : data.filter((val) => val.status == selectedStatus)
-  }
-  columnDefs={columnDefs}
-  defaultColDef={defaultColDef}
-  pagination={true}
-  paginationPageSize={paginationPageSize} 
-  paginationPageSizeSelector={[25, 50, 100, 500, 1000]}
-  animateRows={true}
-  onGridReady={onGridReady}
-  onFirstDataRendered={onFirstDataRendered}
-  quickFilterText={quickFilterText}
-  onRowClicked={(params) => setSelectedRowId(params.data.id)}
-  getRowStyle={(params) => {
-    if (params.data.id === selectedRowId) {
-      return {
-        backgroundColor: '#c4c4c4', 
-        borderLeft: '4px solid #22c55e',
-        transition: 'background-color 0.3s ease',
-      };
-    }
-    return null;
-  }}
-/>
+            theme={themeBalham}
+            ref={gridRef}
+            rowData={
+              selectedStatus == 0
+                ? data
+                : data.filter((val) => val.status == selectedStatus)
+            }
+            columnDefs={columnDefs}
+            defaultColDef={defaultColDef}
+            pagination={true}
+            paginationPageSize={paginationPageSize}
+            paginationPageSizeSelector={[25, 50, 100, 500, 1000]}
+            animateRows={true}
+            onGridReady={onGridReady}
+            onFirstDataRendered={onFirstDataRendered}
+            quickFilterText={quickFilterText}
+            onRowClicked={(params) => setSelectedRowId(params.data.id)}
+            getRowStyle={(params) => {
+              if (params.data.id === selectedRowId) {
+                return {
+                  backgroundColor: '#c4c4c4',
+                  borderLeft: '4px solid #22c55e',
+                  transition: 'background-color 0.3s ease',
+                };
+              }
+              return null;
+            }}
+          />
 
 
           <StatusModal

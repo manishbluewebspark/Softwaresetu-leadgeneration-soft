@@ -700,6 +700,8 @@ export const uploadExcel = async (req, res) => {
           'in_database'
         ]);
 
+
+
         await client.query(
           `INSERT INTO duplicate_logs 
            (batch_id, source_name, customer_name, mobile, email, address, 
@@ -2650,3 +2652,126 @@ export const getMonthlyDealDetails = async (req, res) => {
 //     res.status(500).json({ error: 'Internal server error' });
 //   }
 // };
+
+
+
+
+
+async function getStatusNameById(statusId) {
+  if (!statusId || statusId === '0') {
+    return null;
+  }
+
+  try {
+    const query = 'SELECT name FROM status_master WHERE id = $1';
+    const result = await pool.query(query, [statusId]);
+    
+    if (result.rows.length > 0) {
+      return result.rows[0].name;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error fetching status name:', error);
+    return null;
+  }
+}
+
+export const clearCustomerStatusSimple = async (req, res) => {
+  const { source, currentStatus, setStatus, comment = "Status cleared by admin" } = req.body;
+
+  // Step 1: Get status names
+  const currentStatusName = await getStatusNameById(currentStatus);
+  const setStatusName = await getStatusNameById(setStatus);
+
+  console.log('Clear Status Request:', { 
+    source, 
+    currentStatus, 
+    currentStatusName, 
+    setStatus, 
+    setStatusName, 
+    comment  
+  });
+
+  // Validation
+  if (!source || source === '0') {
+    return res.status(400).json({
+      success: false,
+      error: 'Source is required'
+    });
+  }
+
+  if (!setStatus || setStatus === '0' || !setStatusName) {
+    return res.status(400).json({
+      success: false,
+      error: 'Valid set status is required'
+    });
+  }
+
+  try {
+    // Step 2: Delete from assining_customers
+    let deleteQuery = 'DELETE FROM assining_customers WHERE batch_id = $1';
+    const deleteParams = [source];
+    
+    if (currentStatus && currentStatus !== '0' && currentStatus !== '') {
+      deleteQuery += ' AND status_id = $2 AND status = $3';
+      deleteParams.push(currentStatus);
+      deleteParams.push(currentStatusName);
+    }
+    
+    const deleteResult = await pool.query(deleteQuery, deleteParams);
+
+    console.log(`Deleted ${deleteResult.rowCount} records from assining_customers`);
+
+    // Step 3: Update customers table
+    let updateQuery = `
+      UPDATE customers 
+      SET 
+        status_id = $1,
+        status = $2,
+        comment = $3,
+        updated_at = $4,
+        assigned_to =$5
+      WHERE batch_id = $6 AND status = $7 
+    `;
+    
+    const updateParams = [
+      setStatus,       // status_id
+      setStatusName,   // status name
+      comment,         // comment
+      new Date(),      // updated_at
+      null,
+      source ,           // batch_id (WHERE)
+      currentStatusName ,
+    ];
+
+    if (currentStatus && currentStatus !== '0' && currentStatus !== '' ) {
+      updateQuery += ' AND status_id = $8';
+      updateParams.push(currentStatus);
+    }
+
+    const updateResult = await pool.query(updateQuery, updateParams);
+    console.log(`Updated ${updateResult.rowCount} records in customers table`);
+
+    // Success response
+    return res.json({
+      success: true,
+      message: 'Status cleared successfully',
+      data: {
+        deletedFromAssigning: deleteResult.rowCount,
+        updatedCustomers: updateResult.rowCount,
+        newStatus: setStatusName,
+        oldStatusFilter: currentStatusName || 'All Statuses',
+        timestamp: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in clearCustomerStatusSimple:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to process request',
+      details: error.message
+    });
+  }
+};
