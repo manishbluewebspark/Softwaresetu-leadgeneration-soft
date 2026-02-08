@@ -15,6 +15,8 @@ import SourceFilter from '../components/SourceFilter'
 
 
 
+
+
 import { AgGridReact } from "ag-grid-react";
 import {
   ModuleRegistry,
@@ -58,7 +60,7 @@ export default function CustomerData() {
 
   const [selectedEmployees, setSelectedEmployees] = useState([]);
   const [statusData, setStatusData] = useState([]);
-  
+
   const [statusFullData, setStatusFullData] = useState([]);
   const [openModalData, setOpenModalData] = useState(null);
   const [dateTimeMap, setDateTimeMap] = useState({});
@@ -817,6 +819,15 @@ export default function CustomerData() {
             </button>
           </div>
 
+
+          <button
+            onClick={exportToCsv}
+            className="w-[130px] px-3 py-4.5 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm flex items-center justify-center gap-1"
+            title="Export to CSV"
+          >
+            <FaFileExcel  />
+            Export 
+          </button>
 
 
         </div>
