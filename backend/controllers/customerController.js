@@ -236,7 +236,7 @@ import { pool } from "../config/db.js";
 
 //     data.forEach((row, index) => {
 //       const rowNum = index + 2; // Excel rows are 1-indexed, header is row 1
-      
+
 //       // Extract values with fallbacks
 //       let name = (row[nameColumn] || '').toString().trim();
 //       let email = emailColumn ? (row[emailColumn] || '').toString().trim().toLowerCase() : '';
@@ -329,7 +329,7 @@ import { pool } from "../config/db.js";
 //     // Check for duplicates in database
 //     const mobilesToCheck = prepared.map(p => p.mobile);
 //     let existingMobileSet = new Set();
-    
+
 //     if (mobilesToCheck.length > 0) {
 //       const existingRes = await client.query(
 //         "SELECT mobile FROM customers WHERE mobile = ANY($1::text[])",
@@ -343,7 +343,7 @@ import { pool } from "../config/db.js";
 //     // Separate new and duplicate records
 //     const toInsert = [];
 //     const duplicatesInDB = [];
-    
+
 //     prepared.forEach((customer) => {
 //       if (existingMobileSet.has(customer.mobile)) {
 //         duplicatesInDB.push(customer.mobile);
@@ -413,7 +413,7 @@ import { pool } from "../config/db.js";
 //   } catch (err) {
 //     await client.query("ROLLBACK").catch(() => {});
 //     console.error("Error uploading excel:", err);
-    
+
 //     // More specific error messages
 //     let errorMessage = "Error uploading excel";
 //     if (err.message.includes("invalid input syntax")) {
@@ -421,7 +421,7 @@ import { pool } from "../config/db.js";
 //     } else if (err.message.includes("value too long")) {
 //       errorMessage = "Data too long for database columns";
 //     }
-    
+
 //     res.status(500).json({ 
 //       message: errorMessage, 
 //       error: err.message 
@@ -529,7 +529,7 @@ import { pool } from "../config/db.js";
 
 //     data.forEach((row, index) => {
 //       const rowNum = index + 2;
-      
+
 //       // Extract values with fallbacks
 //       let name = (row[nameColumn] || '').toString().trim();
 //       let email = emailColumn ? (row[emailColumn] || '').toString().trim().toLowerCase() : '';
@@ -623,7 +623,7 @@ import { pool } from "../config/db.js";
 //     // Check for duplicates in database
 //     const mobilesToCheck = prepared.map(p => p.mobile);
 //     const dbDuplicates = [];
-    
+
 //     if (mobilesToCheck.length > 0) {
 //       const existingRes = await client.query(
 //         `SELECT c.mobile, c.name, c.email, c.address, b.batch_id, b.source_name 
@@ -632,7 +632,7 @@ import { pool } from "../config/db.js";
 //          WHERE c.mobile = ANY($1::text[])`,
 //         [mobilesToCheck]
 //       );
-      
+
 //       const existingMobileMap = new Map();
 //       existingRes.rows.forEach((row) => {
 //         existingMobileMap.set(row.mobile.toString(), row);
@@ -782,14 +782,14 @@ import { pool } from "../config/db.js";
 //   } catch (err) {
 //     await client.query("ROLLBACK").catch(() => {});
 //     console.error("Error uploading excel:", err);
-    
+
 //     let errorMessage = "Error uploading excel";
 //     if (err.message.includes("invalid input syntax")) {
 //       errorMessage = "Data format error - check for special characters";
 //     } else if (err.message.includes("value too long")) {
 //       errorMessage = "Data too long for database columns";
 //     }
-    
+
 //     res.status(500).json({ 
 //       message: errorMessage, 
 //       error: err.message 
@@ -798,6 +798,441 @@ import { pool } from "../config/db.js";
 //     client.release();
 //   }
 // };
+
+
+
+
+// export const uploadExcel = async (req, res) => {
+//   const client = await pool.connect();
+//   try {
+//     if (!req.file) {
+//       return res.status(400).json({ message: "No file uploaded" });
+//     }
+//     if (!req.body.source_name) {
+//       return res.status(400).json({ message: "Source name is required" });
+//     }
+
+//     // Read Excel file
+//     const workbook = read(req.file.buffer, { type: "buffer" });
+//     const sheetName = workbook.SheetNames[0];
+//     const sheet = workbook.Sheets[sheetName];
+//     let data = utils.sheet_to_json(sheet, { defval: "", raw: false });
+
+//     // Normalize keys to lowercase and trim
+//     data = data.map((row) => {
+//       const normalized = {};
+//       for (let key in row) {
+//         const newKey = key.toString().trim().toLowerCase()
+//           .replace(/[^\w\s]/gi, '')
+//           .replace(/\s+/g, '_');
+//         normalized[newKey] = row[key];
+//       }
+//       return normalized;
+//     });
+
+//     // Start transaction
+//     await client.query("BEGIN");
+
+//     // Insert into batches and get batch ID
+//     const batchResult = await client.query(
+//       "INSERT INTO batches (source_name, description) VALUES ($1, $2) RETURNING batch_id",
+//       [req.body.source_name, req.body.description || ""]
+//     );
+
+//     if (batchResult.rows.length === 0) {
+//       throw new Error("Failed to insert batch");
+//     }
+//     const batchId = batchResult.rows[0].batch_id;
+
+//     // Define expected column mappings with priority
+//     const columnMappings = {
+//       name: ['name', 'full_name', 'fullname', 'customer_name', 'client_name', 'contact_person'],
+//       mobile: ['mobile', 'phone', 'contact', 'phone_number', 'contact_number', 'mobileno', 'tel', 'telephone'],
+//       email: ['email', 'e_mail', 'mail', 'email_id'],
+//       address: ['address', 'location', 'city', 'area', 'street', 'full_address']
+//     };
+
+//     // Find actual column names in the data
+//     const findColumn = (possibleNames) => {
+//       for (const name of possibleNames) {
+//         if (data[0] && data[0][name] !== undefined) {
+//           return name;
+//         }
+//       }
+//       return null;
+//     };
+
+//     const nameColumn = findColumn(columnMappings.name);
+//     const mobileColumn = findColumn(columnMappings.mobile);
+//     const emailColumn = findColumn(columnMappings.email);
+//     const addressColumn = findColumn(columnMappings.address);
+
+//     // Validate that at least mobile column exists (but we'll be lenient)
+//     if (!mobileColumn) {
+//       await client.query("ROLLBACK");
+//       return res.status(400).json({ 
+//         message: "Excel must contain a 'Mobile' or 'Phone' column",
+//         availableColumns: Object.keys(data[0] || {}) 
+//       });
+//     }
+
+//     // Helper function to clean mobile number (no strict validation)
+//     const cleanMobileNumber = (mobile) => {
+//       if (!mobile) return '';
+
+//       // Convert to string and remove all non-digits
+//       let cleaned = mobile.toString().replace(/\D/g, '');
+
+//       // If empty after cleaning, return empty
+//       if (cleaned.length === 0) return '';
+
+//       // Remove country codes if present
+//       if (cleaned.length === 12 && cleaned.startsWith('91')) {
+//         cleaned = cleaned.substring(2); // Remove '91'
+//       }
+//       if (cleaned.length === 11 && cleaned.startsWith('0')) {
+//         cleaned = cleaned.substring(1); // Remove leading '0'
+//       }
+//       if (cleaned.length === 13 && cleaned.startsWith('+91')) {
+//         cleaned = cleaned.substring(3); // Remove '+91'
+//       }
+
+//       // Return whatever we have (no length validation)
+//       return cleaned;
+//     };
+
+//     // Prepare customer data - NO VALIDATION FOR MOBILE
+//     const prepared = [];
+//     const validationErrors = [];
+//     const inFileDuplicates = [];
+//     const mobileSet = new Set();
+//     const mobileToRowMap = new Map();
+
+//     data.forEach((row, index) => {
+//       const rowNum = index + 2;
+
+//       // Extract values with fallbacks
+//       let name = nameColumn ? (row[nameColumn] || '').toString().trim() : '';
+//       let email = emailColumn ? (row[emailColumn] || '').toString().trim().toLowerCase() : '';
+//       let mobileRaw = (row[mobileColumn] || '').toString().trim();
+//       let address = addressColumn ? (row[addressColumn] || '').toString().trim() : '';
+
+//       // Clean mobile number (no strict formatting)
+//       let mobile = cleanMobileNumber(mobileRaw);
+
+//       // If mobile is empty after cleaning, skip validation entirely
+//       if (!mobile || mobile.length === 0) {
+//         // Still add the record but with empty mobile
+//         mobile = '';
+//       }
+
+//       // Check for duplicate mobile within same file (only if mobile exists)
+//       if (mobile && mobile.length > 0) {
+//         if (mobileSet.has(mobile)) {
+//           inFileDuplicates.push({
+//             rowNum,
+//             name,
+//             mobile,
+//             email,
+//             address,
+//             batchId,
+//             sourceName: req.body.source_name,
+//             duplicateType: 'in_file'
+//           });
+//           return;
+//         }
+//         mobileSet.add(mobile);
+//         mobileToRowMap.set(mobile, { name, email, address, rowNum });
+//       }
+
+//       // Validate email format if provided (use existing isValidEmail function)
+//       if (email && typeof isValidEmail === 'function' && !isValidEmail(email)) {
+//         validationErrors.push(`Row ${rowNum}: Invalid email format: ${email}`);
+//         // Still continue processing, don't return
+//       }
+
+//       // Truncate long values
+//       if (name.length > 100) name = name.substring(0, 100);
+//       if (address.length > 255) address = address.substring(0, 255);
+//       if (email.length > 100) email = email.substring(0, 100);
+
+//       // If name is empty, generate a placeholder
+//       if (!name || name.length === 0) {
+//         if (mobile && mobile.length >= 4) {
+//           name = `Customer_${mobile.substring(Math.max(0, mobile.length - 4))}`; // Use last 4 digits
+//         } else {
+//           name = `Customer_${rowNum}`; // Use row number as fallback
+//         }
+//       }
+
+//       prepared.push({
+//         batchId,
+//         name,
+//         email,
+//         mobile,
+//         address,
+//         status: "Pending",
+//         status_id: 5
+//       });
+//     });
+
+//     // Skip validation errors for mobile (we'll log them but not block)
+//     const nonMobileErrors = validationErrors.filter(err => 
+//       !err.includes('Mobile number must be') && 
+//       !err.includes('Mobile number is required')
+//     );
+
+//     // If there are non-mobile validation errors, rollback
+//     if (nonMobileErrors.length > 0) {
+//       await client.query("ROLLBACK");
+//       return res.status(400).json({
+//         message: "Validation failed",
+//         errors: nonMobileErrors.slice(0, 20),
+//         totalErrors: nonMobileErrors.length
+//       });
+//     }
+
+//     if (prepared.length === 0 && inFileDuplicates.length === 0) {
+//       await client.query("ROLLBACK");
+//       return res.status(400).json({ 
+//         message: "No valid data to import" 
+//       });
+//     }
+
+//     // Check for duplicates in database (only for records with mobile)
+//     const mobilesToCheck = prepared.filter(p => p.mobile && p.mobile.length > 0).map(p => p.mobile);
+//     const dbDuplicates = [];
+
+//     if (mobilesToCheck.length > 0) {
+//       const existingRes = await client.query(
+//         `SELECT c.mobile, c.name, c.email, c.address, b.batch_id, b.source_name 
+//          FROM customers c 
+//          JOIN batches b ON c.batch_id = b.batch_id 
+//          WHERE c.mobile = ANY($1::text[]) AND c.mobile != ''`,
+//         [mobilesToCheck]
+//       );
+
+//       const existingMobileMap = new Map();
+//       existingRes.rows.forEach((row) => {
+//         existingMobileMap.set(row.mobile.toString(), row);
+//       });
+
+//       // Separate new and duplicate records
+//       const toInsert = [];
+//       prepared.forEach((customer) => {
+//         // Only check duplicates if mobile exists
+//         if (customer.mobile && customer.mobile.length > 0 && existingMobileMap.has(customer.mobile)) {
+//           const existing = existingMobileMap.get(customer.mobile);
+//           dbDuplicates.push({
+//             rowNum: mobileToRowMap.get(customer.mobile)?.rowNum || 'Unknown',
+//             name: customer.name,
+//             mobile: customer.mobile,
+//             email: customer.email,
+//             address: customer.address,
+//             batchId,
+//             sourceName: req.body.source_name,
+//             existingBatchId: existing.batch_id,
+//             existingSourceName: existing.source_name,
+//             duplicateType: 'in_database'
+//           });
+//         } else {
+//           toInsert.push(customer);
+//         }
+//       });
+
+//       // Insert in-file duplicates to logs
+//       if (inFileDuplicates.length > 0) {
+//         const inFileLogs = inFileDuplicates.map(dup => [
+//           batchId,
+//           dup.sourceName,
+//           dup.name,
+//           dup.mobile,
+//           dup.email || '',
+//           dup.address || '',
+//           null,
+//           null,
+//           'in_file'
+//         ]);
+
+//         await client.query(
+//           `INSERT INTO duplicate_logs 
+//            (batch_id, source_name, customer_name, mobile, email, address, 
+//             existing_batch_id, existing_source_name, duplicate_type) 
+//            VALUES ${inFileDuplicates.map((_, i) => 
+//              `($${i*9 + 1}, $${i*9 + 2}, $${i*9 + 3}, $${i*9 + 4}, $${i*9 + 5}, 
+//                $${i*9 + 6}, $${i*9 + 7}, $${i*9 + 8}, $${i*9 + 9})`
+//            ).join(', ')}`,
+//           inFileLogs.flat()
+//         );
+//       }
+
+//       // Insert database duplicates to logs
+//       if (dbDuplicates.length > 0) {
+//         const dbLogs = dbDuplicates.map(dup => [
+//           batchId,
+//           dup.sourceName,
+//           dup.name,
+//           dup.mobile,
+//           dup.email || '',
+//           dup.address || '',
+//           dup.existingBatchId,
+//           dup.existingSourceName,
+//           'in_database'
+//         ]);
+
+//         await client.query(
+//           `INSERT INTO duplicate_logs 
+//            (batch_id, source_name, customer_name, mobile, email, address, 
+//             existing_batch_id, existing_source_name, duplicate_type) 
+//            VALUES ${dbDuplicates.map((_, i) => 
+//              `($${i*9 + 1}, $${i*9 + 2}, $${i*9 + 3}, $${i*9 + 4}, $${i*9 + 5}, 
+//                $${i*9 + 6}, $${i*9 + 7}, $${i*9 + 8}, $${i*9 + 9})`
+//            ).join(', ')}`,
+//           dbLogs.flat()
+//         );
+//       }
+
+//       // Insert all records (including those with invalid/empty mobile)
+//       if (toInsert.length > 0) {
+//         const placeholders = toInsert
+//           .map((_, i) => {
+//             const base = i * 7;
+//             return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7})`;
+//           })
+//           .join(", ");
+
+//         const flatValues = toInsert.flatMap((p) => [
+//           p.batchId,
+//           p.name,
+//           p.email,
+//           p.mobile,
+//           p.address,
+//           p.status,
+//           p.status_id,
+//         ]);
+
+//         await client.query(
+//           `INSERT INTO customers (batch_id, name, email, mobile, address, status, status_id) 
+//            VALUES ${placeholders}`,
+//           flatValues
+//         );
+//       }
+
+//       await client.query("COMMIT");
+
+//       // Count records with invalid mobile
+//       const invalidMobileCount = prepared.filter(p => 
+//         !p.mobile || p.mobile.length === 0 || p.mobile.length !== 10
+//       ).length;
+
+//       // Generate summary report
+//       const summary = {
+//         totalRowsInExcel: data.length,
+//         inserted: toInsert.length,
+//         skippedInFileDuplicates: inFileDuplicates.length,
+//         skippedDbDuplicates: dbDuplicates.length,
+//         invalidMobileCount: invalidMobileCount,
+//         batchId: batchId,
+//         columnMapping: {
+//           name: nameColumn || 'Not found (Auto-generated)',
+//           mobile: mobileColumn,
+//           email: emailColumn || 'Not found',
+//           address: addressColumn || 'Not found'
+//         }
+//       };
+
+//       // Prepare warnings
+//       const warnings = [];
+//       if (!nameColumn) {
+//         warnings.push("Name column not found. Names were auto-generated.");
+//       }
+//       if (invalidMobileCount > 0) {
+//         warnings.push(`${invalidMobileCount} records have invalid or incomplete mobile numbers.`);
+//       }
+
+//       res.json({
+//         message: "Excel uploaded successfully",
+//         summary,
+//         warnings: warnings
+//       });
+
+//     } else {
+//       // Insert all records even if no mobiles to check
+//       if (prepared.length > 0) {
+//         const placeholders = prepared
+//           .map((_, i) => {
+//             const base = i * 7;
+//             return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7})`;
+//           })
+//           .join(", ");
+
+//         const flatValues = prepared.flatMap((p) => [
+//           p.batchId,
+//           p.name,
+//           p.email,
+//           p.mobile,
+//           p.address,
+//           p.status,
+//           p.status_id,
+//         ]);
+
+//         await client.query(
+//           `INSERT INTO customers (batch_id, name, email, mobile, address, status, status_id) 
+//            VALUES ${placeholders}`,
+//           flatValues
+//         );
+//       }
+
+//       await client.query("COMMIT");
+
+//       const invalidMobileCount = prepared.filter(p => 
+//         !p.mobile || p.mobile.length === 0 || p.mobile.length !== 10
+//       ).length;
+
+//       const summary = {
+//         totalRowsInExcel: data.length,
+//         inserted: prepared.length,
+//         skippedInFileDuplicates: inFileDuplicates.length,
+//         skippedDbDuplicates: 0,
+//         invalidMobileCount: invalidMobileCount,
+//         batchId: batchId
+//       };
+
+//       const warnings = [];
+//       if (!nameColumn) {
+//         warnings.push("Name column not found. Names were auto-generated.");
+//       }
+//       if (invalidMobileCount > 0) {
+//         warnings.push(`${invalidMobileCount} records have invalid or incomplete mobile numbers.`);
+//       }
+
+//       res.json({
+//         message: "Excel uploaded successfully",
+//         summary,
+//         warnings: warnings
+//       });
+//     }
+
+//   } catch (err) {
+//     await client.query("ROLLBACK").catch(() => {});
+//     console.error("Error uploading excel:", err);
+
+//     let errorMessage = "Error uploading excel";
+//     if (err.message.includes("invalid input syntax")) {
+//       errorMessage = "Data format error - check for special characters";
+//     } else if (err.message.includes("value too long")) {
+//       errorMessage = "Data too long for database columns";
+//     }
+
+//     res.status(500).json({ 
+//       message: errorMessage, 
+//       error: err.message 
+//     });
+//   } finally {
+//     client.release();
+//   }
+// };
+
 
 
 
@@ -833,16 +1268,42 @@ export const uploadExcel = async (req, res) => {
     // Start transaction
     await client.query("BEGIN");
 
-    // Insert into batches and get batch ID
-    const batchResult = await client.query(
-      "INSERT INTO batches (source_name, description) VALUES ($1, $2) RETURNING batch_id",
-      [req.body.source_name, req.body.description || ""]
+    // Check if source name already exists
+    const existingSource = await client.query(
+      "SELECT batch_id, description FROM batches WHERE LOWER(TRIM(source_name)) = LOWER(TRIM($1)) ORDER BY created_at DESC LIMIT 1",
+      [req.body.source_name]
     );
 
-    if (batchResult.rows.length === 0) {
-      throw new Error("Failed to insert batch");
+    let batchId;
+    let isNewBatch = false;
+
+    if (existingSource.rows.length > 0) {
+      // Use existing batch
+      batchId = existingSource.rows[0].batch_id;
+
+      // Optional: Update description if provided (you can choose to update or ignore)
+      if (req.body.description) {
+        await client.query(
+          "UPDATE batches SET description = $1 WHERE batch_id = $2",
+          [req.body.description, batchId]
+        );
+      }
+
+      console.log(`Using existing batch ID: ${batchId} for source: ${req.body.source_name}`);
+    } else {
+      // Create new batch
+      const batchResult = await client.query(
+        "INSERT INTO batches (source_name, description) VALUES ($1, $2) RETURNING batch_id",
+        [req.body.source_name, req.body.description || ""]
+      );
+
+      if (batchResult.rows.length === 0) {
+        throw new Error("Failed to insert batch");
+      }
+      batchId = batchResult.rows[0].batch_id;
+      isNewBatch = true;
+      console.log(`Created new batch ID: ${batchId} for source: ${req.body.source_name}`);
     }
-    const batchId = batchResult.rows[0].batch_id;
 
     // Define expected column mappings with priority
     const columnMappings = {
@@ -867,41 +1328,37 @@ export const uploadExcel = async (req, res) => {
     const emailColumn = findColumn(columnMappings.email);
     const addressColumn = findColumn(columnMappings.address);
 
-    // Validate that at least mobile column exists (but we'll be lenient)
+    // Validate that at least mobile column exists
     if (!mobileColumn) {
       await client.query("ROLLBACK");
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: "Excel must contain a 'Mobile' or 'Phone' column",
-        availableColumns: Object.keys(data[0] || {}) 
+        availableColumns: Object.keys(data[0] || {})
       });
     }
 
-    // Helper function to clean mobile number (no strict validation)
+    // Helper function to clean mobile number
     const cleanMobileNumber = (mobile) => {
       if (!mobile) return '';
-      
-      // Convert to string and remove all non-digits
+
       let cleaned = mobile.toString().replace(/\D/g, '');
-      
-      // If empty after cleaning, return empty
+
       if (cleaned.length === 0) return '';
-      
-      // Remove country codes if present
+
       if (cleaned.length === 12 && cleaned.startsWith('91')) {
-        cleaned = cleaned.substring(2); // Remove '91'
+        cleaned = cleaned.substring(2);
       }
       if (cleaned.length === 11 && cleaned.startsWith('0')) {
-        cleaned = cleaned.substring(1); // Remove leading '0'
+        cleaned = cleaned.substring(1);
       }
       if (cleaned.length === 13 && cleaned.startsWith('+91')) {
-        cleaned = cleaned.substring(3); // Remove '+91'
+        cleaned = cleaned.substring(3);
       }
-      
-      // Return whatever we have (no length validation)
+
       return cleaned;
     };
 
-    // Prepare customer data - NO VALIDATION FOR MOBILE
+    // Prepare customer data
     const prepared = [];
     const validationErrors = [];
     const inFileDuplicates = [];
@@ -910,23 +1367,19 @@ export const uploadExcel = async (req, res) => {
 
     data.forEach((row, index) => {
       const rowNum = index + 2;
-      
-      // Extract values with fallbacks
+
       let name = nameColumn ? (row[nameColumn] || '').toString().trim() : '';
       let email = emailColumn ? (row[emailColumn] || '').toString().trim().toLowerCase() : '';
       let mobileRaw = (row[mobileColumn] || '').toString().trim();
       let address = addressColumn ? (row[addressColumn] || '').toString().trim() : '';
 
-      // Clean mobile number (no strict formatting)
       let mobile = cleanMobileNumber(mobileRaw);
 
-      // If mobile is empty after cleaning, skip validation entirely
       if (!mobile || mobile.length === 0) {
-        // Still add the record but with empty mobile
         mobile = '';
       }
 
-      // Check for duplicate mobile within same file (only if mobile exists)
+      // Check for duplicate mobile within same file
       if (mobile && mobile.length > 0) {
         if (mobileSet.has(mobile)) {
           inFileDuplicates.push({
@@ -945,10 +1398,9 @@ export const uploadExcel = async (req, res) => {
         mobileToRowMap.set(mobile, { name, email, address, rowNum });
       }
 
-      // Validate email format if provided (use existing isValidEmail function)
-      if (email && typeof isValidEmail === 'function' && !isValidEmail(email)) {
+      // Validate email format
+      if (email && !isValidEmail(email)) {
         validationErrors.push(`Row ${rowNum}: Invalid email format: ${email}`);
-        // Still continue processing, don't return
       }
 
       // Truncate long values
@@ -956,12 +1408,12 @@ export const uploadExcel = async (req, res) => {
       if (address.length > 255) address = address.substring(0, 255);
       if (email.length > 100) email = email.substring(0, 100);
 
-      // If name is empty, generate a placeholder
+      // Generate name if empty
       if (!name || name.length === 0) {
         if (mobile && mobile.length >= 4) {
-          name = `Customer_${mobile.substring(Math.max(0, mobile.length - 4))}`; // Use last 4 digits
+          name = `Customer_${mobile.substring(Math.max(0, mobile.length - 4))}`;
         } else {
-          name = `Customer_${rowNum}`; // Use row number as fallback
+          name = `Customer_${rowNum}`;
         }
       }
 
@@ -976,13 +1428,12 @@ export const uploadExcel = async (req, res) => {
       });
     });
 
-    // Skip validation errors for mobile (we'll log them but not block)
-    const nonMobileErrors = validationErrors.filter(err => 
-      !err.includes('Mobile number must be') && 
+    // Handle validation errors
+    const nonMobileErrors = validationErrors.filter(err =>
+      !err.includes('Mobile number must be') &&
       !err.includes('Mobile number is required')
     );
 
-    // If there are non-mobile validation errors, rollback
     if (nonMobileErrors.length > 0) {
       await client.query("ROLLBACK");
       return res.status(400).json({
@@ -994,15 +1445,15 @@ export const uploadExcel = async (req, res) => {
 
     if (prepared.length === 0 && inFileDuplicates.length === 0) {
       await client.query("ROLLBACK");
-      return res.status(400).json({ 
-        message: "No valid data to import" 
+      return res.status(400).json({
+        message: "No valid data to import"
       });
     }
 
     // Check for duplicates in database (only for records with mobile)
     const mobilesToCheck = prepared.filter(p => p.mobile && p.mobile.length > 0).map(p => p.mobile);
     const dbDuplicates = [];
-    
+
     if (mobilesToCheck.length > 0) {
       const existingRes = await client.query(
         `SELECT c.mobile, c.name, c.email, c.address, b.batch_id, b.source_name 
@@ -1011,7 +1462,7 @@ export const uploadExcel = async (req, res) => {
          WHERE c.mobile = ANY($1::text[]) AND c.mobile != ''`,
         [mobilesToCheck]
       );
-      
+
       const existingMobileMap = new Map();
       existingRes.rows.forEach((row) => {
         existingMobileMap.set(row.mobile.toString(), row);
@@ -1020,7 +1471,6 @@ export const uploadExcel = async (req, res) => {
       // Separate new and duplicate records
       const toInsert = [];
       prepared.forEach((customer) => {
-        // Only check duplicates if mobile exists
         if (customer.mobile && customer.mobile.length > 0 && existingMobileMap.has(customer.mobile)) {
           const existing = existingMobileMap.get(customer.mobile);
           dbDuplicates.push({
@@ -1058,10 +1508,10 @@ export const uploadExcel = async (req, res) => {
           `INSERT INTO duplicate_logs 
            (batch_id, source_name, customer_name, mobile, email, address, 
             existing_batch_id, existing_source_name, duplicate_type) 
-           VALUES ${inFileDuplicates.map((_, i) => 
-             `($${i*9 + 1}, $${i*9 + 2}, $${i*9 + 3}, $${i*9 + 4}, $${i*9 + 5}, 
-               $${i*9 + 6}, $${i*9 + 7}, $${i*9 + 8}, $${i*9 + 9})`
-           ).join(', ')}`,
+           VALUES ${inFileDuplicates.map((_, i) =>
+            `($${i * 9 + 1}, $${i * 9 + 2}, $${i * 9 + 3}, $${i * 9 + 4}, $${i * 9 + 5}, 
+               $${i * 9 + 6}, $${i * 9 + 7}, $${i * 9 + 8}, $${i * 9 + 9})`
+          ).join(', ')}`,
           inFileLogs.flat()
         );
       }
@@ -1084,15 +1534,15 @@ export const uploadExcel = async (req, res) => {
           `INSERT INTO duplicate_logs 
            (batch_id, source_name, customer_name, mobile, email, address, 
             existing_batch_id, existing_source_name, duplicate_type) 
-           VALUES ${dbDuplicates.map((_, i) => 
-             `($${i*9 + 1}, $${i*9 + 2}, $${i*9 + 3}, $${i*9 + 4}, $${i*9 + 5}, 
-               $${i*9 + 6}, $${i*9 + 7}, $${i*9 + 8}, $${i*9 + 9})`
-           ).join(', ')}`,
+           VALUES ${dbDuplicates.map((_, i) =>
+            `($${i * 9 + 1}, $${i * 9 + 2}, $${i * 9 + 3}, $${i * 9 + 4}, $${i * 9 + 5}, 
+               $${i * 9 + 6}, $${i * 9 + 7}, $${i * 9 + 8}, $${i * 9 + 9})`
+          ).join(', ')}`,
           dbLogs.flat()
         );
       }
 
-      // Insert all records (including those with invalid/empty mobile)
+      // Insert new records
       if (toInsert.length > 0) {
         const placeholders = toInsert
           .map((_, i) => {
@@ -1121,7 +1571,7 @@ export const uploadExcel = async (req, res) => {
       await client.query("COMMIT");
 
       // Count records with invalid mobile
-      const invalidMobileCount = prepared.filter(p => 
+      const invalidMobileCount = prepared.filter(p =>
         !p.mobile || p.mobile.length === 0 || p.mobile.length !== 10
       ).length;
 
@@ -1133,6 +1583,8 @@ export const uploadExcel = async (req, res) => {
         skippedDbDuplicates: dbDuplicates.length,
         invalidMobileCount: invalidMobileCount,
         batchId: batchId,
+        isNewBatch: isNewBatch,
+        sourceName: req.body.source_name,
         columnMapping: {
           name: nameColumn || 'Not found (Auto-generated)',
           mobile: mobileColumn,
@@ -1149,9 +1601,12 @@ export const uploadExcel = async (req, res) => {
       if (invalidMobileCount > 0) {
         warnings.push(`${invalidMobileCount} records have invalid or incomplete mobile numbers.`);
       }
+      if (!isNewBatch) {
+        warnings.push(`Data added to existing source: ${req.body.source_name} (Batch ID: ${batchId})`);
+      }
 
       res.json({
-        message: "Excel uploaded successfully",
+        message: isNewBatch ? "New batch created successfully" : "Data added to existing batch successfully",
         summary,
         warnings: warnings
       });
@@ -1185,7 +1640,7 @@ export const uploadExcel = async (req, res) => {
 
       await client.query("COMMIT");
 
-      const invalidMobileCount = prepared.filter(p => 
+      const invalidMobileCount = prepared.filter(p =>
         !p.mobile || p.mobile.length === 0 || p.mobile.length !== 10
       ).length;
 
@@ -1195,7 +1650,9 @@ export const uploadExcel = async (req, res) => {
         skippedInFileDuplicates: inFileDuplicates.length,
         skippedDbDuplicates: 0,
         invalidMobileCount: invalidMobileCount,
-        batchId: batchId
+        batchId: batchId,
+        isNewBatch: isNewBatch,
+        sourceName: req.body.source_name
       };
 
       const warnings = [];
@@ -1205,28 +1662,31 @@ export const uploadExcel = async (req, res) => {
       if (invalidMobileCount > 0) {
         warnings.push(`${invalidMobileCount} records have invalid or incomplete mobile numbers.`);
       }
+      if (!isNewBatch) {
+        warnings.push(`Data added to existing source: ${req.body.source_name} (Batch ID: ${batchId})`);
+      }
 
       res.json({
-        message: "Excel uploaded successfully",
+        message: isNewBatch ? "New batch created successfully" : "Data added to existing batch successfully",
         summary,
         warnings: warnings
       });
     }
 
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => {});
+    await client.query("ROLLBACK").catch(() => { });
     console.error("Error uploading excel:", err);
-    
+
     let errorMessage = "Error uploading excel";
     if (err.message.includes("invalid input syntax")) {
       errorMessage = "Data format error - check for special characters";
     } else if (err.message.includes("value too long")) {
       errorMessage = "Data too long for database columns";
     }
-    
-    res.status(500).json({ 
-      message: errorMessage, 
-      error: err.message 
+
+    res.status(500).json({
+      message: errorMessage,
+      error: err.message
     });
   } finally {
     client.release();
@@ -1236,10 +1696,11 @@ export const uploadExcel = async (req, res) => {
 
 
 
+
 // Get duplicate logs for a batch
 export const getDuplicateLogs = async (req, res) => {
   const { batchId } = req.params;
-  
+
   try {
     const result = await pool.query(
       `SELECT 
@@ -1259,7 +1720,7 @@ export const getDuplicateLogs = async (req, res) => {
        ORDER BY created_at DESC`,
       [batchId]
     );
-    
+
     res.json(result.rows);
   } catch (err) {
     console.error("Error fetching duplicate logs:", err);
@@ -1272,7 +1733,7 @@ export const getDuplicateLogs = async (req, res) => {
 export const getAllDuplicateLogs = async (req, res) => {
   const { page = 1, limit = 50, search = '', type = '' } = req.query;
   const offset = (page - 1) * limit;
-  
+
   try {
     let query = `
       SELECT 
@@ -1290,25 +1751,25 @@ export const getAllDuplicateLogs = async (req, res) => {
       FROM duplicate_logs 
       WHERE 1=1
     `;
-    
+
     const params = [];
     let paramCount = 1;
-    
+
     if (search) {
       query += ` AND (customer_name ILIKE $${paramCount} OR mobile ILIKE $${paramCount} OR source_name ILIKE $${paramCount})`;
       params.push(`%${search}%`);
       paramCount++;
     }
-    
+
     if (type) {
       query += ` AND duplicate_type = $${paramCount}`;
       params.push(type);
       paramCount++;
     }
-    
+
     query += ` ORDER BY created_at DESC LIMIT $${paramCount} OFFSET $${paramCount + 1}`;
     params.push(limit, offset);
-    
+
     // Get total count
     const countQuery = `
       SELECT COUNT(*) as total 
@@ -1317,12 +1778,12 @@ export const getAllDuplicateLogs = async (req, res) => {
       ${search ? `AND (customer_name ILIKE '%${search}%' OR mobile ILIKE '%${search}%' OR source_name ILIKE '%${search}%')` : ''}
       ${type ? `AND duplicate_type = '${type}'` : ''}
     `;
-    
+
     const [result, countResult] = await Promise.all([
       pool.query(query, params),
       pool.query(countQuery)
     ]);
-    
+
     res.json({
       logs: result.rows,
       total: parseInt(countResult.rows[0].total),
@@ -1340,7 +1801,7 @@ export const getAllDuplicateLogs = async (req, res) => {
 
 export const getDuplicateCount = async (req, res) => {
   const { batchId } = req.params;
-  
+
   try {
     const result = await pool.query(
       `SELECT COUNT(*) as count 
@@ -1348,13 +1809,13 @@ export const getDuplicateCount = async (req, res) => {
        WHERE batch_id = $1`,
       [batchId]
     );
-    
+
     res.json({
       count: parseInt(result.rows[0].count)
     });
   } catch (err) {
     console.error("Error fetching duplicate count:", err);
-    res.status(500).json({ 
+    res.status(500).json({
       message: "Error fetching duplicate count",
       count: 0
     });
@@ -1372,20 +1833,20 @@ function isValidEmail(email) {
 // Optional: Add this function to handle different date formats
 function parseDate(dateStr) {
   if (!dateStr) return null;
-  
+
   // Try different date formats
   const formats = [
     'DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD',
     'DD-MM-YYYY', 'MM-DD-YYYY', 'YYYY/MM/DD'
   ];
-  
+
   for (const format of formats) {
     const parsed = moment(dateStr, format, true);
     if (parsed.isValid()) {
       return parsed.toDate();
     }
   }
-  
+
   return null;
 }
 
@@ -1443,7 +1904,7 @@ export async function getCustomersByBatch(req, res) {
 
 
 // export async function getCustomers(req, res) {
-  
+
 //   try {
 //     const query = `
 //       SELECT 
@@ -1514,8 +1975,8 @@ export async function getCustomers(req, res) {
   } catch (error) {
     console.error(
       "Error fetching customers with notes:",
-  
-      error.message,  
+
+      error.message,
       error.stack
     );
     res.status(500).json({ message: "Server error", error: error.message });
@@ -1635,7 +2096,7 @@ export const changeStatus = async (req, res) => {
     }
 
 
-    
+
 
 
     const {
@@ -1650,7 +2111,7 @@ export const changeStatus = async (req, res) => {
     } = req.body;
 
 
-     if (!batch_id) {
+    if (!batch_id) {
       return res
         .status(400)
         .json({ success: false, error: "Batch ID is required" });
@@ -1705,7 +2166,7 @@ export const changeStatus = async (req, res) => {
         updated_by_id,
         updated_by_name,
         statusid,
-        comment|| null,
+        comment || null,
         batch_id
       ]
     );
@@ -1723,7 +2184,7 @@ export const changeStatus = async (req, res) => {
 
 // export const leadData = async (req, res) => {
 //   try {
-   
+
 
 //     const result = await pool.query(`
 //   SELECT lh.*, ac.*
@@ -1787,7 +2248,7 @@ export const dashboardBoxData = async (req, res) => {
       ORDER BY employee_name;
     `;
 
-    const statuses = ['Pending', 'Demo', 'Follow Up', 'Not Picked Call', 'Deal','Interested'];
+    const statuses = ['Pending', 'Demo', 'Follow Up', 'Not Picked Call', 'Deal', 'Interested'];
 
     const result = await pool.query(query, [statuses]);
 
@@ -1803,7 +2264,7 @@ export const dashboardBoxData = async (req, res) => {
 };
 
 export const dashboardBoxDataUser = async (req, res) => {
-   const {id}=req.params
+  const { id } = req.params
   try {
     const query = `
       SELECT employee_name, status
@@ -1812,9 +2273,9 @@ export const dashboardBoxDataUser = async (req, res) => {
       ORDER BY employee_name;
     `;
 
-    const statuses = ['Pending', 'Demo', 'Follow Up', 'Not Picked Call', 'Deal','Interested'];
+    const statuses = ['Pending', 'Demo', 'Follow Up', 'Not Picked Call', 'Deal', 'Interested'];
 
-    const result = await pool.query(query, [statuses,id]);
+    const result = await pool.query(query, [statuses, id]);
 
     if (result.rows.length > 0) {
       res.status(200).json({ data: result.rows });
@@ -1849,17 +2310,17 @@ export const dashboardBoxDataUser = async (req, res) => {
 
 //     const query = `
 //       SELECT 
-        // id,
-        // name,
-        // email,
-        // mobile,
-        // address,
-        // status,
-        // updated_by,
-        // created_at,
-        // updated_at,
-        // customer_id,
-        // comment,
+// id,
+// name,
+// email,
+// mobile,
+// address,
+// status,
+// updated_by,
+// created_at,
+// updated_at,
+// customer_id,
+// comment,
 //         followup_datetime
 //       FROM lead_history
 //       WHERE customer_id = $1
@@ -1981,7 +2442,7 @@ export const getName = async (req, res) => {
 
 export const addBankDetails = async (req, res) => {
   try {
-    const { clientId, mobile, address, bankName, accountNumber, ifsc,accountholdername } = req.body;
+    const { clientId, mobile, address, bankName, accountNumber, ifsc, accountholdername } = req.body;
 
     if (!clientId || !bankName || !accountNumber || !ifsc || !accountholdername) {
       return res.status(400).json({ message: "Missing required fields" });
@@ -2068,7 +2529,7 @@ export const earning = async (req, res) => {
   try {
     const { clientId, name, amount, bank, mobile, comment, receivedDate } = req.body;
 
-    if (!clientId || !name || !amount || !bank || !mobile  || !receivedDate) {
+    if (!clientId || !name || !amount || !bank || !mobile || !receivedDate) {
       return res.status(400).json({ message: "All required fields must be provided" });
     }
 
@@ -2146,7 +2607,7 @@ export const earning = async (req, res) => {
 //       endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 //     }
 
- 
+
 //     const statusRes = await pool.query("SELECT id, name FROM status_master ORDER BY id");
 //     const statuses = statusRes.rows;
 
@@ -2154,7 +2615,7 @@ export const earning = async (req, res) => {
 //   if (!name || name.trim() === "") {
 //     return `status_${id}`;
 //   }
-  
+
 //   return name.replace(/[^a-zA-Z0-9_]/g, "_");
 // };
 
@@ -2307,23 +2768,23 @@ export const getStatusByDataForEmployee = async (req, res) => {
 //       )
 //       .join(",\n");
 
-  
+
 //    const query = `
 //   SELECT
 //     u.id AS assigned_to,
 //     COALESCE(ac.employee_name, u.name) || ' - ' || u.email || ' - ' || u.mobile AS employee,
 //     TO_CHAR(CURRENT_DATE, 'YYYY-MM-DD') AS date,
 
-  
+
 //     ${countColumns},
 
-    
+
 //     (SELECT COUNT(*) 
 //      FROM assining_customers ac3 
 //      WHERE ac3.assigned_to = u.id 
 //        AND ac3.status = 'Pending') AS total_pending,
 
-   
+
 //     (SELECT COUNT(*) 
 //      FROM assining_customers ac2 
 //      WHERE ac2.assigned_to = u.id 
@@ -2902,19 +3363,19 @@ export const getDailyDemoUser = async (req, res) => {
 
 
 export const getMonthlyDeals = async (req, res) => {
-    try {
-        const { userId, year = new Date().getFullYear() } = req.query;
+  try {
+    const { userId, year = new Date().getFullYear() } = req.query;
 
-        const params = [year];
-        let userFilter = '';
+    const params = [year];
+    let userFilter = '';
 
-        if (userId && userId !== 'all') {
-            userFilter = `AND ac.assigned_to = $2`;
-            params.push(userId);
-        }
+    if (userId && userId !== 'all') {
+      userFilter = `AND ac.assigned_to = $2`;
+      params.push(userId);
+    }
 
-        // Direct customers table se count karein
-        const query = `
+    // Direct customers table se count karein
+    const query = `
             SELECT 
                 TO_CHAR(c.updated_at, 'Month') AS month,
                 EXTRACT(YEAR FROM c.updated_at) AS year,
@@ -2928,45 +3389,45 @@ export const getMonthlyDeals = async (req, res) => {
             ORDER BY MIN(EXTRACT(MONTH FROM c.updated_at));
         `;
 
-        const { rows } = await pool.query(query, params);
-        
-        const monthNames = [
-            'January', 'February', 'March', 'April', 'May', 'June',
-            'July', 'August', 'September', 'October', 'November', 'December'
-        ];
+    const { rows } = await pool.query(query, params);
 
-        const allMonthsData = monthNames.map((month, index) => {
-            const foundRow = rows.find(row => row.month.trim() === month);
-            return {
-                month: month,
-                year: parseInt(year),
-                total_deals: foundRow ? parseInt(foundRow.total_deals) : 0
-            };
-        });
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
 
-        res.status(200).json(allMonthsData);
+    const allMonthsData = monthNames.map((month, index) => {
+      const foundRow = rows.find(row => row.month.trim() === month);
+      return {
+        month: month,
+        year: parseInt(year),
+        total_deals: foundRow ? parseInt(foundRow.total_deals) : 0
+      };
+    });
 
-    } catch (error) {
-        console.error('Error fetching monthly deals:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
+    res.status(200).json(allMonthsData);
+
+  } catch (error) {
+    console.error('Error fetching monthly deals:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 };
 
 
 export const getMonthlyDealDetails = async (req, res) => {
-    try {
-        const { userId, year = new Date().getFullYear() } = req.query;
+  try {
+    const { userId, year = new Date().getFullYear() } = req.query;
 
-        const params = [year];
-        let userFilter = '';
+    const params = [year];
+    let userFilter = '';
 
-        if (userId && userId !== 'all') {
-            userFilter = `AND ac.assigned_to = $2`;
-            params.push(userId);
-        }
+    if (userId && userId !== 'all') {
+      userFilter = `AND ac.assigned_to = $2`;
+      params.push(userId);
+    }
 
-        // Pehle monthly counts nikalte hain
-        const countQuery = `
+    // Pehle monthly counts nikalte hain
+    const countQuery = `
             SELECT 
                 TO_CHAR(c.updated_at, 'Month') AS month,
                 EXTRACT(YEAR FROM c.updated_at) AS year,
@@ -2980,25 +3441,25 @@ export const getMonthlyDealDetails = async (req, res) => {
             ORDER BY MIN(EXTRACT(MONTH FROM c.updated_at));
         `;
 
-        const { rows: countRows } = await pool.query(countQuery, params);
-        
-        // Ab har month ke leads ka complete data nikalte hain
-        const monthNames = [
-            'January', 'February', 'March', 'April', 'May', 'June',
-            'July', 'August', 'September', 'October', 'November', 'December'
-        ];
+    const { rows: countRows } = await pool.query(countQuery, params);
 
-        const allMonthsData = await Promise.all(
-            monthNames.map(async (month, index) => {
-                const foundRow = countRows.find(row => row.month.trim() === month);
-                const totalDeals = foundRow ? parseInt(foundRow.total_deals) : 0;
-                
-                // Agar deals hain to leads ka data fetch karo
-                let leads = [];
-                if (totalDeals > 0) {
-                    const monthNumber = index + 1;
-                    
-                    const leadsQuery = `
+    // Ab har month ke leads ka complete data nikalte hain
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+
+    const allMonthsData = await Promise.all(
+      monthNames.map(async (month, index) => {
+        const foundRow = countRows.find(row => row.month.trim() === month);
+        const totalDeals = foundRow ? parseInt(foundRow.total_deals) : 0;
+
+        // Agar deals hain to leads ka data fetch karo
+        let leads = [];
+        if (totalDeals > 0) {
+          const monthNumber = index + 1;
+
+          const leadsQuery = `
                         SELECT 
                             c.id,
                             c.name,
@@ -3018,27 +3479,27 @@ export const getMonthlyDealDetails = async (req, res) => {
                             ${userFilter ? 'AND ac.assigned_to = $3' : ''}
                         ORDER BY c.updated_at DESC;
                     `;
-                    
-                    const leadsParams = userFilter ? [monthNumber, year, userId] : [monthNumber, year];
-                    const { rows: leadRows } = await pool.query(leadsQuery, leadsParams);
-                    leads = leadRows;
-                }
-                
-                return {
-                    month: month,
-                    year: parseInt(year),
-                    total_deals: totalDeals,
-                    leads: leads
-                };
-            })
-        );
 
-        res.status(200).json(allMonthsData);
+          const leadsParams = userFilter ? [monthNumber, year, userId] : [monthNumber, year];
+          const { rows: leadRows } = await pool.query(leadsQuery, leadsParams);
+          leads = leadRows;
+        }
 
-    } catch (error) {
-        console.error('Error fetching monthly deals:', error);
-        res.status(500).json({ error: 'Internal server error' });
-    }
+        return {
+          month: month,
+          year: parseInt(year),
+          total_deals: totalDeals,
+          leads: leads
+        };
+      })
+    );
+
+    res.status(200).json(allMonthsData);
+
+  } catch (error) {
+    console.error('Error fetching monthly deals:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 };
 
 
@@ -3097,11 +3558,11 @@ async function getStatusNameById(statusId) {
   try {
     const query = 'SELECT name FROM status_master WHERE id = $1';
     const result = await pool.query(query, [statusId]);
-    
+
     if (result.rows.length > 0) {
       return result.rows[0].name;
     }
-    
+
     return null;
   } catch (error) {
     console.error('Error fetching status name:', error);
@@ -3116,13 +3577,13 @@ export const clearCustomerStatusSimple = async (req, res) => {
   const currentStatusName = await getStatusNameById(currentStatus);
   const setStatusName = await getStatusNameById(setStatus);
 
-  console.log('Clear Status Request:', { 
-    source, 
-    currentStatus, 
-    currentStatusName, 
-    setStatus, 
-    setStatusName, 
-    comment  
+  console.log('Clear Status Request:', {
+    source,
+    currentStatus,
+    currentStatusName,
+    setStatus,
+    setStatusName,
+    comment
   });
 
   // Validation
@@ -3144,13 +3605,13 @@ export const clearCustomerStatusSimple = async (req, res) => {
     // Step 2: Delete from assining_customers
     let deleteQuery = 'DELETE FROM assining_customers WHERE batch_id = $1';
     const deleteParams = [source];
-    
+
     if (currentStatus && currentStatus !== '0' && currentStatus !== '') {
       deleteQuery += ' AND status_id = $2 AND status = $3';
       deleteParams.push(currentStatus);
       deleteParams.push(currentStatusName);
     }
-    
+
     const deleteResult = await pool.query(deleteQuery, deleteParams);
 
     console.log(`Deleted ${deleteResult.rowCount} records from assining_customers`);
@@ -3166,18 +3627,18 @@ export const clearCustomerStatusSimple = async (req, res) => {
         assigned_to =$5
       WHERE batch_id = $6 AND status = $7 
     `;
-    
+
     const updateParams = [
       setStatus,       // status_id
       setStatusName,   // status name
       comment,         // comment
       new Date(),      // updated_at
       null,
-      source ,           // batch_id (WHERE)
-      currentStatusName ,
+      source,           // batch_id (WHERE)
+      currentStatusName,
     ];
 
-    if (currentStatus && currentStatus !== '0' && currentStatus !== '' ) {
+    if (currentStatus && currentStatus !== '0' && currentStatus !== '') {
       updateQuery += ' AND status_id = $8';
       updateParams.push(currentStatus);
     }
