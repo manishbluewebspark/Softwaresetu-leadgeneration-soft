@@ -3668,3 +3668,78 @@ export const clearCustomerStatusSimple = async (req, res) => {
     });
   }
 };
+
+
+
+
+
+
+
+
+// Get batch details with all customer records
+export const getBatchDetails = async (req, res) => {
+  try {
+    const { batchId } = req.params;
+    
+    // Fetch all customers of this batch with their details and assigned user name
+    const customersQuery = `
+      SELECT 
+        c.id,
+        c.name,
+        c.email,
+        c.mobile,
+        c.address,
+        c.status,
+        c.status_id,
+        c.assigned_to,
+        u.name as assigned_to_name,
+        c.source_name,
+        c.followup_datetime,
+        c.comment,
+        c.created_at,
+        c.updated_at,
+        CASE 
+          WHEN c.assigned_to IS NULL THEN 'pending'
+          ELSE 'assigned'
+        END as assignment_status
+      FROM customers c
+      LEFT JOIN users u ON c.assigned_to = u.id
+      WHERE c.batch_id = $1
+      ORDER BY c.id DESC
+    `;
+    
+    const customersResult = await pool.query(customersQuery, [batchId]);
+    
+    // Get enhanced summary statistics
+    const summaryQuery = `
+      SELECT 
+        COUNT(*) as total_records,
+        COUNT(CASE WHEN assigned_to IS NOT NULL THEN 1 END) as assigned_count,
+        COUNT(CASE WHEN assigned_to IS NULL THEN 1 END) as pending_count,
+        COUNT(CASE WHEN assigned_to IS NOT NULL AND status_id = 1 THEN 1 END) as assigned_open_count,
+        COUNT(CASE WHEN assigned_to IS NULL AND status_id = 1 THEN 1 END) as pending_open_count,
+        COUNT(CASE WHEN status_id = 1 THEN 1 END) as open_count,
+        COUNT(CASE WHEN status_id = 2 THEN 1 END) as in_progress_count,
+        COUNT(CASE WHEN status_id = 3 THEN 1 END) as closed_count
+      FROM customers 
+      WHERE batch_id = $1
+    `;
+    
+    const summaryResult = await pool.query(summaryQuery, [batchId]);
+    
+    res.json({
+      success: true,
+      batch_id: batchId,
+      customers: customersResult.rows,
+      summary: summaryResult.rows[0]
+    });
+    
+  } catch (error) {
+    console.error('Error fetching batch details:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch batch details',
+      error: error.message 
+    });
+  }
+};

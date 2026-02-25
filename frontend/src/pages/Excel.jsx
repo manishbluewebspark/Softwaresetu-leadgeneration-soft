@@ -333,7 +333,7 @@
 //               >
 //                 Download Example File
 //               </button>
-             
+
 //             </div>
 //           </div>
 //         </div>
@@ -368,12 +368,12 @@
 //             }`}>
 //               {pendingCount > 0 ? (
 //                 <>
-                 
+
 //                   {pendingCount} 
 //                 </>
 //               ) : (
 //                 <>
-                 
+
 //                   0
 //                 </>
 //               )}
@@ -492,7 +492,7 @@
 //           </div>
 //         </form>
 
-      
+
 //         {manualRecords.length > 0 && (
 //           <div className="mt-6">
 //             <h3 className="font-semibold mb-2">Added Records</h3>
@@ -897,7 +897,7 @@
 //                   new Date(log.created_at).toLocaleString()
 //                 ])
 //               ].map(row => row.join(',')).join('\n');
-              
+
 //               const blob = new Blob([csv], { type: 'text/csv' });
 //               const url = window.URL.createObjectURL(blob);
 //               const a = document.createElement('a');
@@ -1125,7 +1125,7 @@
 //       const response = await axios.post(`${apiUrl}/customers/upload`, formData, {
 //         headers: { "Content-Type": "multipart/form-data" },
 //       });
-      
+
 //       // Handle success response with summary
 //       if (response.data.summary) {
 //         setSuccessData(response.data);
@@ -1134,12 +1134,12 @@
 //       } else {
 //         toast.success("File uploaded successfully!");
 //       }
-      
+
 //       setFile(null);
 //       setDescription("");
 //       fetchBatches();
 //       setSuccess(true);
-      
+
 //     } catch (err) {
 //       const errorResponse = err.response?.data;
 //       toast.error(`Upload failed: ${errorResponse?.message || err.message}`);
@@ -1208,7 +1208,7 @@
 //         setSuccessData(response.data);
 //         setSuccessModalOpen(true);
 //       }
-      
+
 //       toast.success("Manual batch uploaded successfully!");
 //       setManualLoading(false)
 //       setManualRecords([]);
@@ -1397,7 +1397,7 @@
 //                   },
 //                   comparator: (valueA, valueB) => valueA - valueB,
 //                 },
-               
+
 //                 {
 //                   headerName: "Actions",
 //                   field: "action",
@@ -1863,7 +1863,7 @@
 //                   new Date(log.created_at).toLocaleString()
 //                 ])
 //               ].map(row => row.join(',')).join('\n');
-              
+
 //               const blob = new Blob([csv], { type: 'text/csv' });
 //               const url = window.URL.createObjectURL(blob);
 //               const a = document.createElement('a');
@@ -2118,7 +2118,7 @@
 //       const response = await axios.post(`${apiUrl}/customers/upload`, formData, {
 //         headers: { "Content-Type": "multipart/form-data" },
 //       });
-      
+
 //       // Handle success response with summary
 //       if (response.data.summary) {
 //         setSuccessData(response.data);
@@ -2127,12 +2127,12 @@
 //       } else {
 //         toast.success("File uploaded successfully!");
 //       }
-      
+
 //       setFile(null);
 //       setDescription("");
 //       fetchBatches();
 //       setSuccess(true);
-      
+
 //     } catch (err) {
 //       const errorResponse = err.response?.data;
 //       toast.error(`Upload failed: ${errorResponse?.message || err.message}`);
@@ -2201,7 +2201,7 @@
 //         setSuccessData(response.data);
 //         setSuccessModalOpen(true);
 //       }
-      
+
 //       toast.success("Manual batch uploaded successfully!");
 //       setManualLoading(false)
 //       setManualRecords([]);
@@ -2700,6 +2700,7 @@ import { useNavigate } from "react-router-dom";
 import Modal from "react-modal";
 import "./dealTable.css";
 import QuickFilter from "./QuickFilter";
+import BatchDetailsModal from "./BatchDetailsModal";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -2718,7 +2719,7 @@ Modal.setAppElement("#root");
 //     try {
 //       const apiUrl = import.meta.env.VITE_API_URL;
 //       const { data } = await axios.get(`${apiUrl}/customers/get-batches`);
-      
+
 //       // Get unique sources with their latest description
 //       const sourceMap = new Map();
 //       data.forEach(batch => {
@@ -2734,11 +2735,11 @@ Modal.setAppElement("#root");
 //           }
 //         }
 //       });
-      
+
 //       // Convert to array and sort alphabetically
 //       const uniqueSources = Array.from(sourceMap.values())
 //         .sort((a, b) => a.name.localeCompare(b.name));
-      
+
 //       setExistingSources(uniqueSources);
 //     } catch (err) {
 //       console.error("Error fetching sources:", err);
@@ -2879,7 +2880,7 @@ const SourceNameSelector = ({ value, onChange, onSourceSelect }) => {
     try {
       const apiUrl = import.meta.env.VITE_API_URL;
       const { data } = await axios.get(`${apiUrl}/customers/get-batches`);
-      
+
       // Get unique sources with their latest description
       const sourceMap = new Map();
       data.forEach(batch => {
@@ -2895,11 +2896,11 @@ const SourceNameSelector = ({ value, onChange, onSourceSelect }) => {
           }
         }
       });
-      
+
       // Convert to array and sort alphabetically
       const uniqueSources = Array.from(sourceMap.values())
         .sort((a, b) => a.name.localeCompare(b.name));
-      
+
       setExistingSources(uniqueSources);
     } catch (err) {
       console.error("Error fetching sources:", err);
@@ -3061,7 +3062,7 @@ const DuplicateLogsModal = ({ isOpen, onClose, batchId, sourceName }) => {
 
   const filteredLogs = logs.filter(log => {
     const matchesType = !selectedType || log.duplicate_type === selectedType;
-    const matchesSearch = !searchTerm || 
+    const matchesSearch = !searchTerm ||
       log.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       log.mobile?.includes(searchTerm) ||
       log.source_name?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -3069,9 +3070,9 @@ const DuplicateLogsModal = ({ isOpen, onClose, batchId, sourceName }) => {
   });
 
   const columnDefs = useMemo(() => [
-    { 
-      headerName: "Type", 
-      field: "duplicate_type", 
+    {
+      headerName: "Type",
+      field: "duplicate_type",
       width: 120,
       cellRenderer: (params) => {
         const type = params.value;
@@ -3087,21 +3088,21 @@ const DuplicateLogsModal = ({ isOpen, onClose, batchId, sourceName }) => {
     { headerName: "Mobile", field: "mobile", width: 130 },
     { headerName: "Email", field: "email", flex: 1 },
     { headerName: "Upload Source", field: "source_name", width: 150 },
-    { 
-      headerName: "Existing Batch", 
-      field: "existing_batch_id", 
+    {
+      headerName: "Existing Batch",
+      field: "existing_batch_id",
       width: 120,
       cellRenderer: (params) => params.value || '-'
     },
-    { 
-      headerName: "Existing Source", 
-      field: "existing_source_name", 
+    {
+      headerName: "Existing Source",
+      field: "existing_source_name",
       width: 150,
       cellRenderer: (params) => params.value || '-'
     },
-    { 
-      headerName: "Date", 
-      field: "created_at", 
+    {
+      headerName: "Date",
+      field: "created_at",
       width: 180,
       valueFormatter: (p) => p.value ? new Date(p.value).toLocaleString() : "-"
     }
@@ -3126,12 +3127,12 @@ const DuplicateLogsModal = ({ isOpen, onClose, batchId, sourceName }) => {
             Duplicate Logs
           </h2>
           <p className="text-gray-600">
-            Batch: <span className="font-semibold">{batchId}</span> | 
+            Batch: <span className="font-semibold">{batchId}</span> |
             Source: <span className="font-semibold">{sourceName}</span>
           </p>
         </div>
-        <button 
-          onClick={onClose} 
+        <button
+          onClick={onClose}
           className="text-gray-500 hover:text-gray-700 text-2xl"
         >
           ✕
@@ -3201,7 +3202,7 @@ const DuplicateLogsModal = ({ isOpen, onClose, batchId, sourceName }) => {
                   new Date(log.created_at).toLocaleString()
                 ])
               ].map(row => row.join(',')).join('\n');
-              
+
               const blob = new Blob([csv], { type: 'text/csv' });
               const url = window.URL.createObjectURL(blob);
               const a = document.createElement('a');
@@ -3392,6 +3393,11 @@ export default function Excel() {
   const [selectedBatchForLogs, setSelectedBatchForLogs] = useState(null);
   const [selectedSourceForLogs, setSelectedSourceForLogs] = useState("");
 
+  const [batchDetailsModalOpen, setBatchDetailsModalOpen] = useState(false);
+  const [selectedBatchForDetails, setSelectedBatchForDetails] = useState(null);
+  const [selectedSourceForDetails, setSelectedSourceForDetails] = useState("");
+
+
   const openDeleteModal = (batchId) => {
     setDeleteBatchId(batchId);
     setIsDeleteModalOpen(true);
@@ -3465,13 +3471,13 @@ export default function Excel() {
     formData.append("file", file);
     formData.append("source_name", sourceName.trim()); // Trim the source name
     formData.append("description", description);
-    
+
     try {
       setLoading(true);
       const response = await axios.post(`${apiUrl}/customers/upload`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      
+
       // Handle success response with summary
       if (response.data.summary) {
         setSuccessData(response.data);
@@ -3480,12 +3486,12 @@ export default function Excel() {
       } else {
         toast.success("File uploaded successfully!");
       }
-      
+
       setFile(null);
       setDescription("");
       fetchBatches();
       setSuccess(true);
-      
+
     } catch (err) {
       const errorResponse = err.response?.data;
       toast.error(`Upload failed: ${errorResponse?.message || err.message}`);
@@ -3554,7 +3560,7 @@ export default function Excel() {
         setSuccessData(response.data);
         setSuccessModalOpen(true);
       }
-      
+
       toast.success("Manual batch uploaded successfully!");
       setManualLoading(false);
       setManualRecords([]);
@@ -3628,14 +3634,14 @@ export default function Excel() {
               onChange={(e) => setDescription(e.target.value)}
               className="px-4 py-2 border border-gray-400 w-full focus:ring focus:ring-blue-200 lg:col-span-1"
             />
-            
+
             <input
               type="file"
               accept=".xlsx, .xls, .csv"
               onChange={(e) => setFile(e.target.files[0])}
               className="px-4 py-2 border border-gray-400 w-full lg:col-span-1"
             />
-            
+
             <div className="flex gap-4 lg:col-span-2 flex-wrap">
               <button
                 onClick={handleUpload}
@@ -3709,15 +3715,14 @@ export default function Excel() {
                   cellRenderer: (params) => {
                     const pendingCount = params.value || 0;
                     return (
-                      <div className={`inline-flex items-center px-3 py-0.1 rounded-full text-sm font-semibold ${
-                        pendingCount > 0 
-                          ? 'bg-red-100 text-red-800 border border-red-300' 
+                      <div className={`inline-flex items-center px-3 py-0.1 rounded-full text-sm font-semibold ${pendingCount > 0
+                          ? 'bg-red-100 text-red-800 border border-red-300'
                           : 'bg-green-100 text-green-800 border border-green-300'
-                      }`}>
+                        }`}>
                         {pendingCount > 0 ? (
                           <>
                             <AlertCircle size={14} className="mr-1" />
-                            {pendingCount} 
+                            {pendingCount}
                           </>
                         ) : (
                           <>
@@ -3737,11 +3742,10 @@ export default function Excel() {
                   cellRenderer: (params) => {
                     const duplicateCount = params.value || 0;
                     return (
-                      <div className={`inline-flex items-center gap-2 px-3 py-0.1 rounded-full text-sm font-semibold ${
-                        duplicateCount > 0 
-                          ? 'bg-orange-100 text-orange-800 border border-orange-300' 
+                      <div className={`inline-flex items-center gap-2 px-3 py-0.1 rounded-full text-sm font-semibold ${duplicateCount > 0
+                          ? 'bg-orange-100 text-orange-800 border border-orange-300'
                           : 'bg-gray-100 text-gray-600 border border-gray-300'
-                      }`}>
+                        }`}>
                         <Users size={14} className="mr-1" />
                         {duplicateCount}
                       </div>
@@ -3752,7 +3756,7 @@ export default function Excel() {
                 {
                   headerName: "Actions",
                   field: "action",
-                  flex: 0.5,
+                  flex: 0.8,
                   cellRenderer: (params) => (
                     <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
                       <div className="flex items-center gap-2">
@@ -3762,6 +3766,23 @@ export default function Excel() {
                           onClick={() => navigate(`/excel/batch/${params.data.batch_id}`)}
                           title="View Details"
                         />
+
+                        <span style={{ margin: "0 8px", color: "#ccc" }}>|</span>
+
+                        <Users
+                          onClick={() => {
+                            setSelectedBatchForDetails(params.data.batch_id);
+                            setSelectedSourceForDetails(params.data.source_name);
+                            setBatchDetailsModalOpen(true);
+                          }}
+                          className="cursor-pointer text-gray-600 hover:text-red-600"
+                          title="View Batch Details"
+                        >
+
+                        </Users>
+
+                        <span style={{ margin: "0 8px", color: "#ccc" }}>|</span>
+
                         <Trash
                           size={18}
                           className="cursor-pointer text-gray-600 hover:text-red-600"
@@ -3938,6 +3959,17 @@ export default function Excel() {
         }}
         batchId={selectedBatchForLogs}
         sourceName={selectedSourceForLogs}
+      />
+
+      <BatchDetailsModal
+        isOpen={batchDetailsModalOpen}
+        onClose={() => {
+          setBatchDetailsModalOpen(false);
+          setSelectedBatchForDetails(null);
+          setSelectedSourceForDetails("");
+        }}
+        batchId={selectedBatchForDetails}
+        sourceName={selectedSourceForDetails}
       />
 
       {/* Delete Confirmation Modal */}

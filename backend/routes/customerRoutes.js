@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { getCustomers,getAllDuplicateLogs , getDuplicateCount , getDuplicateLogs ,uploadExcel, getBatches, getCustomersByBatch, getAssignedCustomers, changeStatus, leadData, dashboardBoxData, getLeadHistoryByCustomerId, getName, addBankDetails, getBankDetails, earning, getStatusByDataForEmployee, getDailyDemos, getStatusByDataForEmployeeCurrentDate, earningData, batchDelete, dashboardBoxDataUser, getLeadHistory, getStatusByDataForSourceDaily, getStatusByDataForEmployeeCurrentDateNew, getDailyDemoUser , getMonthlyDeals, getMonthlyDealDetails, clearCustomerStatusSimple } from "../controllers/customerController.js";
+import { getCustomers,getAllDuplicateLogs , getDuplicateCount , getDuplicateLogs ,uploadExcel, getBatches, getCustomersByBatch, getAssignedCustomers, changeStatus, leadData, dashboardBoxData, getLeadHistoryByCustomerId, getName, addBankDetails, getBankDetails, earning, getStatusByDataForEmployee, getDailyDemos, getStatusByDataForEmployeeCurrentDate, earningData, batchDelete, dashboardBoxDataUser, getLeadHistory, getStatusByDataForSourceDaily, getStatusByDataForEmployeeCurrentDateNew, getDailyDemoUser , getMonthlyDeals, getMonthlyDealDetails, clearCustomerStatusSimple, getBatchDetails } from "../controllers/customerController.js";
 
 
 const router = Router();
@@ -34,6 +34,8 @@ router.get("/fetch-customer-status", dashboardBoxData);
 router.get("/fetch-customer-status/:id", dashboardBoxDataUser);
 
 router.put("/status/:id", changeStatus);
+
+router.get('/batch-details/:batchId',getBatchDetails);
 
 router.get("/lead/:id", getLeadHistoryByCustomerId);
 
